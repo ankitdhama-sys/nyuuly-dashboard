@@ -105,10 +105,43 @@ async function fetchJSON(url) {
 function buildQuery() {
   const { start, end } = getDateRange();
   const params = new URLSearchParams();
-  if (state.company !== 'all') params.set('company', state.company);
+  params.set('company', state.company);
   params.set('start', start);
   params.set('end', end);
   return params.toString();
+}
+
+function companyLabel(company) {
+  return company === 'workjapan' ? 'WORK JAPAN' : 'Nyuuly';
+}
+
+function updateFilterLabel(filter) {
+  const el = document.getElementById('filterLabel');
+  if (!el) return;
+  const { start, end } = getDateRange();
+  const co = filter?.company || state.company;
+  const rangeLabel = state.dateRange === '7' ? 'Last 7 days'
+    : state.dateRange === '30' ? 'Last 30 days'
+    : state.dateRange === '90' ? 'Last 3 months'
+    : 'Custom range';
+  el.textContent = `${companyLabel(co)} · ${rangeLabel} (${start} → ${end})`;
+}
+
+function syncStateFromUI() {
+  const activeCompany = document.querySelector('#companyTabs .tab-btn.active');
+  if (activeCompany?.dataset.company) state.company = activeCompany.dataset.company;
+
+  const activeRange = document.querySelector('#dateGroup .tab-btn.active');
+  if (activeRange?.dataset.range) state.dateRange = activeRange.dataset.range;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const endInput = document.getElementById('endDate');
+  const startInput = document.getElementById('startDate');
+  if (endInput && !endInput.value) endInput.value = today;
+  if (startInput && !startInput.value) {
+    const { start } = getDateRange();
+    startInput.value = start;
+  }
 }
 
 function renderDataStatus(completeness) {
@@ -990,6 +1023,7 @@ function renderPagination(containerId, current, total, onChange) {
 
 async function loadDashboard() {
   const q = buildQuery();
+  document.body.classList.add('is-loading');
 
   try {
     const [social, funnel, traffic, pages, journeys] = await Promise.all([
@@ -999,6 +1033,8 @@ async function loadDashboard() {
       fetchJSON(`/api/pages?${q}`),
       fetchJSON(`/api/journeys?${q}`),
     ]);
+
+    updateFilterLabel(journeys.filter || social.filter);
 
     journeyData = journeys;
     if (!journeys.journeys?.some((j) => j.id === state.activeJourney)) {
@@ -1036,39 +1072,66 @@ async function loadDashboard() {
     renderPagesTable();
   } catch (err) {
     console.error('Dashboard load error:', err);
+  } finally {
+    document.body.classList.remove('is-loading');
   }
 }
 
 function initControls() {
   document.getElementById('companyTabs').addEventListener('click', (e) => {
-    if (!e.target.dataset.company) return;
-    document.querySelectorAll('#companyTabs .tab-btn').forEach(b => b.classList.remove('active'));
-    e.target.classList.add('active');
-    state.company = e.target.dataset.company;
+    const btn = e.target.closest('[data-company]');
+    if (!btn) return;
+    document.querySelectorAll('#companyTabs .tab-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.company = btn.dataset.company;
     state.activeJourney = 'awareness';
     loadDashboard();
   });
 
   document.getElementById('dateGroup').addEventListener('click', (e) => {
-    if (!e.target.dataset.range) return;
-    document.querySelectorAll('#dateGroup .tab-btn').forEach(b => b.classList.remove('active'));
-    e.target.classList.add('active');
-    state.dateRange = e.target.dataset.range;
+    const btn = e.target.closest('[data-range]');
+    if (!btn) return;
+    document.querySelectorAll('#dateGroup .tab-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.dateRange = btn.dataset.range;
 
     const showCustom = state.dateRange === 'custom';
-    document.getElementById('startDate').style.display = showCustom ? 'inline-block' : 'none';
-    document.getElementById('endDate').style.display = showCustom ? 'inline-block' : 'none';
+    const startInput = document.getElementById('startDate');
+    const endInput = document.getElementById('endDate');
+    startInput.style.display = showCustom ? 'inline-block' : 'none';
+    endInput.style.display = showCustom ? 'inline-block' : 'none';
 
-    if (!showCustom) loadDashboard();
+    if (showCustom) {
+      const today = new Date().toISOString().slice(0, 10);
+      if (!endInput.value) endInput.value = today;
+      if (!startInput.value) {
+        const d = new Date();
+        d.setDate(d.getDate() - 30);
+        startInput.value = d.toISOString().slice(0, 10);
+      }
+      state.startDate = startInput.value;
+      state.endDate = endInput.value;
+    } else {
+      state.startDate = null;
+      state.endDate = null;
+    }
+
+    loadDashboard();
   });
 
   document.getElementById('startDate').addEventListener('change', (e) => {
     state.startDate = e.target.value;
+    state.dateRange = 'custom';
+    document.querySelectorAll('#dateGroup .tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelector('#dateGroup [data-range="custom"]')?.classList.add('active');
     if (state.endDate) loadDashboard();
   });
 
   document.getElementById('endDate').addEventListener('change', (e) => {
     state.endDate = e.target.value;
+    state.dateRange = 'custom';
+    document.querySelectorAll('#dateGroup .tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelector('#dateGroup [data-range="custom"]')?.classList.add('active');
     if (state.startDate) loadDashboard();
   });
 
@@ -1087,6 +1150,7 @@ function initControls() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  syncStateFromUI();
   initControls();
   loadLastUpdated();
   loadDashboard();

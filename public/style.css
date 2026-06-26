@@ -895,6 +895,19 @@ tr:hover td {
   margin-right: 0.25rem;
 }
 
+.filter-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  width: 100%;
+  flex-basis: 100%;
+  padding-top: 0.25rem;
+}
+
+body.is-loading .filter-label::after {
+  content: ' · refreshing…';
+  color: var(--nyuuly);
+}
+
 .data-status {
   display: flex;
   align-items: center;

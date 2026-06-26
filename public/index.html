@@ -24,13 +24,15 @@
     </div>
 
     <div class="date-group" id="dateGroup">
-      <button class="tab-btn active" data-range="7">Last 7 Days</button>
+      <button class="tab-btn" data-range="7">Last 7 Days</button>
       <button class="tab-btn" data-range="30">Last 30 Days</button>
-      <button class="tab-btn" data-range="90">Last 3 Months</button>
+      <button class="tab-btn active" data-range="90">Last 3 Months</button>
       <button class="tab-btn" data-range="custom">Custom Range</button>
       <input type="date" id="startDate" style="display:none">
       <input type="date" id="endDate" style="display:none">
     </div>
+
+    <div class="filter-label" id="filterLabel">Loading filters…</div>
 
     <div class="data-status" id="dataStatus" title="Weekly CSV upload status">
       <span class="data-status-label">Data files:</span>

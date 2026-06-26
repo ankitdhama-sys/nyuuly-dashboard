@@ -6,6 +6,12 @@ const rateLimit = require('express-rate-limit');
 const { parse } = require('csv-parse/sync');
 const { db, initDb } = require('./database/db');
 const {
+  prorateTrafficRows,
+  proratePagesRows,
+  prorateFunnelRows,
+  trafficKpisFromRows,
+} = require('./database/date-filter');
+const {
   FILE_TYPES,
   FILE_TYPE_LABELS,
   COMPANY_LABELS,
@@ -455,7 +461,7 @@ app.get('/api/social', (req, res) => {
     ORDER BY views DESC
   `).all(...params);
 
-  res.json({ kpis, timeSeries, topPosts, postTypes, posts: allPosts });
+  res.json({ kpis, timeSeries, topPosts, postTypes, posts: allPosts, filter: { company, start, end } });
 });
 
 app.get('/api/funnel', (req, res) => {
@@ -478,39 +484,35 @@ app.get('/api/funnel', (req, res) => {
     params.push(endCompact, startCompact);
   }
 
-  const rows = db.prepare(`SELECT * FROM funnel_data ${clause} ORDER BY step, device_category`).all(...params);
+  const rawRows = db.prepare(`SELECT * FROM funnel_data ${clause} ORDER BY step, device_category`).all(...params);
+  const rows = start && end ? prorateFunnelRows(rawRows, start, end) : rawRows;
 
   const step1Devices = rows.filter(
     (r) => r.step && r.step.includes('First open') && r.device_category !== 'Total'
   );
 
-  res.json({ rows, step1Devices });
+  res.json({ rows, step1Devices, filter: { company, start, end } });
 });
 
 app.get('/api/traffic', (req, res) => {
   const { company, start, end } = req.query;
   const { clause, params } = buildGa4DateQuery(company, start, end);
 
-  const rows = db.prepare(`SELECT * FROM traffic_acquisition ${clause} ORDER BY sessions DESC`).all(...params);
+  const rawRows = db.prepare(`SELECT * FROM traffic_acquisition ${clause} ORDER BY sessions DESC`).all(...params);
+  const rows = start && end ? prorateTrafficRows(rawRows, start, end) : rawRows;
+  const kpis = trafficKpisFromRows(rows);
 
-  const kpis = db.prepare(`
-    SELECT
-      COALESCE(SUM(sessions), 0) as totalSessions,
-      COALESCE(SUM(engaged_sessions), 0) as totalEngagedSessions,
-      CASE WHEN SUM(sessions) > 0 THEN ROUND(CAST(SUM(engaged_sessions) AS REAL) / SUM(sessions) * 100, 1) ELSE 0 END as engagementRate
-    FROM traffic_acquisition ${clause}
-  `).get(...params);
-
-  res.json({ rows, kpis });
+  res.json({ rows, kpis, filter: { company, start, end } });
 });
 
 app.get('/api/pages', (req, res) => {
   const { company, start, end } = req.query;
   const { clause, params } = buildGa4DateQuery(company, start, end);
 
-  const rows = db.prepare(`SELECT * FROM pages_screens ${clause} ORDER BY views DESC`).all(...params);
+  const rawRows = db.prepare(`SELECT * FROM pages_screens ${clause} ORDER BY views DESC`).all(...params);
+  const rows = start && end ? proratePagesRows(rawRows, start, end) : rawRows;
 
-  res.json({ rows });
+  res.json({ rows, filter: { company, start, end } });
 });
 
 app.get('/api/summary', (req, res) => {
@@ -619,23 +621,18 @@ app.get('/api/journeys', (req, res) => {
     FROM social_posts ${socialQ.clause}
   `).get(...socialQ.params);
 
-  const trafficRows = db.prepare(`
+  const rawTrafficRows = db.prepare(`
     SELECT * FROM traffic_acquisition ${ga4Q.clause} ORDER BY sessions DESC
   `).all(...ga4Q.params);
+  const trafficRows = start && end
+    ? prorateTrafficRows(rawTrafficRows, start, end)
+    : rawTrafficRows;
+  const trafficKpis = trafficKpisFromRows(trafficRows);
 
-  const trafficKpis = db.prepare(`
-    SELECT
-      COALESCE(SUM(sessions), 0) as totalSessions,
-      COALESCE(SUM(engaged_sessions), 0) as totalEngagedSessions,
-      CASE WHEN SUM(sessions) > 0
-        THEN ROUND(CAST(SUM(engaged_sessions) AS REAL) / SUM(sessions) * 100, 1)
-        ELSE 0 END as engagementRate
-    FROM traffic_acquisition ${ga4Q.clause}
-  `).get(...ga4Q.params);
-
-  const pages = db.prepare(`
+  const rawPages = db.prepare(`
     SELECT * FROM pages_screens ${ga4Q.clause} ORDER BY views DESC
   `).all(...ga4Q.params);
+  const pages = start && end ? proratePagesRows(rawPages, start, end) : rawPages;
 
   let funnelClause = 'WHERE 1=1';
   const funnelParams = [];
@@ -653,9 +650,10 @@ app.get('/api/journeys', (req, res) => {
     funnelParams.push(endCompact, startCompact);
   }
 
-  const funnelRows = db.prepare(`
+  const rawFunnelRows = db.prepare(`
     SELECT * FROM funnel_data ${funnelClause} ORDER BY step, device_category
   `).all(...funnelParams);
+  const funnelRows = start && end ? prorateFunnelRows(rawFunnelRows, start, end) : rawFunnelRows;
 
   const ga4Funnel = buildGa4FunnelSteps(funnelRows);
   const funnelEntryUsers = ga4Funnel[0]?.users || trafficKpis.totalSessions || 0;
@@ -848,6 +846,7 @@ app.get('/api/journeys', (req, res) => {
     completenessCount: Object.values(dataCompleteness).filter(Boolean).length,
     company: journeyCompany,
     companyLabel: COMPANY_LABELS[journeyCompany],
+    filter: { company, start, end },
   });
 });
 
