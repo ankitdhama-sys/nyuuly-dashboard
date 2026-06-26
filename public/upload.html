@@ -43,6 +43,95 @@
       <!-- filled by JS -->
     </div>
 
+    <div class="manual-upload-section" id="manualUploadSection">
+      <h2>Manual Data Entry — WORK JAPAN</h2>
+      <p>Enter monthly WORK JAPAN metrics below (separate from the 4 weekly GA4 / social CSV exports). Select a month, fill in the values, and save.</p>
+
+      <div class="upload-slot entry-slot" id="manualPlatformSlot">
+        <div class="upload-slot-header">
+          <h3>Platform Registrations &amp; Active Users</h3>
+          <span class="slot-badge slot-badge-pending" id="platformBadge">No data</span>
+        </div>
+        <p class="slot-meta slot-meta-muted" id="platformMeta">Enter registrations and active users for Web, Android, and iOS.</p>
+        <form class="entry-form" id="platformEntryForm">
+          <div class="entry-form-row">
+            <label for="platformMonth">Month</label>
+            <input type="month" id="platformMonth" name="month" required>
+          </div>
+          <div class="entry-table-wrap">
+            <table class="entry-table">
+              <thead>
+                <tr>
+                  <th>Platform</th>
+                  <th>Registrations</th>
+                  <th>Active Users</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Web</td>
+                  <td><input type="number" id="platformWebReg" min="0" placeholder="0"></td>
+                  <td><input type="number" id="platformWebActive" min="0" placeholder="0"></td>
+                </tr>
+                <tr>
+                  <td>Android</td>
+                  <td><input type="number" id="platformAndroidReg" min="0" placeholder="0"></td>
+                  <td><input type="number" id="platformAndroidActive" min="0" placeholder="0"></td>
+                </tr>
+                <tr>
+                  <td>iOS</td>
+                  <td><input type="number" id="platformIosReg" min="0" placeholder="0"></td>
+                  <td><input type="number" id="platformIosActive" min="0" placeholder="0"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <button type="submit" class="btn-primary btn-slot" id="platformSaveBtn">Save Platform Data</button>
+        </form>
+      </div>
+
+      <div class="upload-slot entry-slot" id="manualApplicantsSlot">
+        <div class="upload-slot-header">
+          <h3>Job Seeker Applications</h3>
+          <span class="slot-badge slot-badge-pending" id="applicantsBadge">No data</span>
+        </div>
+        <p class="slot-meta slot-meta-muted" id="applicantsMeta">Enter monthly job seeker funnel numbers.</p>
+        <form class="entry-form" id="applicantsEntryForm">
+          <div class="entry-form-row">
+            <label for="applicantMonth">Month</label>
+            <input type="month" id="applicantMonth" name="month" required>
+          </div>
+          <div class="entry-grid">
+            <div class="entry-field">
+              <label for="uniqueApplicants">Unique Applicants</label>
+              <input type="number" id="uniqueApplicants" min="0" placeholder="0" required>
+            </div>
+            <div class="entry-field">
+              <label for="screeningPasses">Screening Passes</label>
+              <input type="number" id="screeningPasses" min="0" placeholder="0" required>
+            </div>
+            <div class="entry-field">
+              <label for="totalApplications">Total Applications</label>
+              <input type="number" id="totalApplications" min="0" placeholder="0" required>
+            </div>
+            <div class="entry-field">
+              <label for="interviewsFixed">Interviews Fixed</label>
+              <input type="number" id="interviewsFixed" min="0" placeholder="0" required>
+            </div>
+            <div class="entry-field">
+              <label for="remainingEsp">Remaining ESP</label>
+              <input type="number" id="remainingEsp" min="0" placeholder="0" required>
+            </div>
+            <div class="entry-field">
+              <label for="selected">Selected</label>
+              <input type="number" id="selected" min="0" placeholder="0" required>
+            </div>
+          </div>
+          <button type="submit" class="btn-primary btn-slot" id="applicantsSaveBtn">Save Applicant Data</button>
+        </form>
+      </div>
+    </div>
+
     <div class="section">
       <div class="section-header">
         <h2>Upload History</h2>
@@ -118,6 +207,8 @@
         funnel: 'Funnel Data',
         traffic: 'Traffic Acquisition',
         pages: 'Pages & Screens',
+        platform: 'Platform Registrations',
+        applicants: 'Job Seeker Applications',
       };
       return map[type] || type;
     }
@@ -171,12 +262,193 @@
       document.getElementById('uploadProgress').classList.toggle('upload-progress-complete', status?.allComplete);
     }
 
+    function defaultMonthValue() {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    function monthToRange(monthVal) {
+      const [y, m] = monthVal.split('-').map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      const mm = String(m).padStart(2, '0');
+      return {
+        start: `${y}-${mm}-01`,
+        end: `${y}-${mm}-${String(lastDay).padStart(2, '0')}`,
+      };
+    }
+
+    function initMonthInputs() {
+      const val = defaultMonthValue();
+      document.getElementById('platformMonth').value = val;
+      document.getElementById('applicantMonth').value = val;
+    }
+
+    function updateManualSectionVisibility() {
+      const isWorkJapan = companySelect.value === 'workjapan';
+      document.getElementById('manualUploadSection').style.display = isWorkJapan ? '' : 'none';
+    }
+
+    function updateManualStatus(status) {
+      if (companySelect.value !== 'workjapan') return;
+      const configs = [
+        { type: 'platform', badgeId: 'platformBadge', metaId: 'platformMeta', slotId: 'manualPlatformSlot', label: 'platform rows' },
+        { type: 'applicants', badgeId: 'applicantsBadge', metaId: 'applicantsMeta', slotId: 'manualApplicantsSlot', label: 'months' },
+      ];
+
+      for (const cfg of configs) {
+        const info = status?.manualFiles?.[cfg.type] || { uploaded: false };
+        const badge = document.getElementById(cfg.badgeId);
+        const meta = document.getElementById(cfg.metaId);
+        const slot = document.getElementById(cfg.slotId);
+        if (!badge || !meta) continue;
+
+        badge.className = `slot-badge ${info.uploaded ? 'slot-badge-done' : 'slot-badge-pending'}`;
+        badge.textContent = info.uploaded ? 'Saved' : 'No data';
+        slot?.classList.toggle('upload-slot-done', info.uploaded);
+
+        if (info.uploaded) {
+          meta.textContent = `${info.rowsAdded} ${cfg.label} saved${info.latestMonth ? ` · latest: ${info.latestMonth}` : ''}${info.uploadedAt ? ` · updated ${info.uploadedAt}` : ''}`;
+        }
+      }
+    }
+
+    async function loadPlatformFormData() {
+      const month = document.getElementById('platformMonth').value;
+      if (!month) return;
+      const { start, end } = monthToRange(month);
+      const company = companySelect.value;
+
+      const fields = {
+        Web: ['platformWebReg', 'platformWebActive'],
+        Android: ['platformAndroidReg', 'platformAndroidActive'],
+        iOS: ['platformIosReg', 'platformIosActive'],
+      };
+      Object.values(fields).flat().forEach((id) => {
+        document.getElementById(id).value = '';
+      });
+
+      try {
+        const res = await fetch(`/api/platform-stats?company=${company}&start=${start}&end=${end}`);
+        const data = await res.json();
+        for (const row of data.rows || []) {
+          const ids = fields[row.platform];
+          if (!ids) continue;
+          document.getElementById(ids[0]).value = row.registrations ?? '';
+          document.getElementById(ids[1]).value = row.active_users ?? '';
+        }
+      } catch (err) {
+        console.error('Failed to load platform form data:', err);
+      }
+    }
+
+    async function loadApplicantFormData() {
+      const month = document.getElementById('applicantMonth').value;
+      if (!month) return;
+      const { start, end } = monthToRange(month);
+      const company = companySelect.value;
+
+      const ids = ['uniqueApplicants', 'screeningPasses', 'totalApplications', 'interviewsFixed', 'remainingEsp', 'selected'];
+      ids.forEach((id) => { document.getElementById(id).value = ''; });
+
+      try {
+        const res = await fetch(`/api/applicant-stats?company=${company}&start=${start}&end=${end}`);
+        const data = await res.json();
+        const row = data.rows?.[0];
+        if (!row) return;
+        document.getElementById('uniqueApplicants').value = row.unique_applicants ?? '';
+        document.getElementById('screeningPasses').value = row.screening_passes ?? '';
+        document.getElementById('totalApplications').value = row.total_applications ?? '';
+        document.getElementById('interviewsFixed').value = row.interviews_fixed ?? '';
+        document.getElementById('remainingEsp').value = row.remaining_esp ?? '';
+        document.getElementById('selected').value = row.selected ?? '';
+      } catch (err) {
+        console.error('Failed to load applicant form data:', err);
+      }
+    }
+
+    async function handlePlatformEntry(e) {
+      e.preventDefault();
+      const btn = document.getElementById('platformSaveBtn');
+      const month = document.getElementById('platformMonth').value;
+      const company = companySelect.value;
+
+      const platforms = [
+        { platform: 'Web', registrations: document.getElementById('platformWebReg').value, active_users: document.getElementById('platformWebActive').value },
+        { platform: 'Android', registrations: document.getElementById('platformAndroidReg').value, active_users: document.getElementById('platformAndroidActive').value },
+        { platform: 'iOS', registrations: document.getElementById('platformIosReg').value, active_users: document.getElementById('platformIosActive').value },
+      ].filter((p) => p.registrations !== '' || p.active_users !== '');
+
+      if (!platforms.length) {
+        showToast('Enter at least one platform row', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      try {
+        const res = await fetch('/api/manual/platform', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company, month, platforms }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Save failed');
+        showToast(`Platform data saved for ${data.month}`);
+        await loadStatus();
+        await loadHistory();
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Platform Data';
+      }
+    }
+
+    async function handleApplicantEntry(e) {
+      e.preventDefault();
+      const btn = document.getElementById('applicantsSaveBtn');
+      const company = companySelect.value;
+      const month = document.getElementById('applicantMonth').value;
+
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      try {
+        const res = await fetch('/api/manual/applicants', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company,
+            month,
+            unique_applicants: document.getElementById('uniqueApplicants').value,
+            screening_passes: document.getElementById('screeningPasses').value,
+            total_applications: document.getElementById('totalApplications').value,
+            interviews_fixed: document.getElementById('interviewsFixed').value,
+            remaining_esp: document.getElementById('remainingEsp').value,
+            selected: document.getElementById('selected').value,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Save failed');
+        showToast(`Applicant data saved for ${data.month}`);
+        await loadStatus();
+        await loadHistory();
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Applicant Data';
+      }
+    }
+
     async function loadStatus() {
       try {
         const res = await fetch(`/api/upload-status?company=${companySelect.value}`);
         const status = await res.json();
         renderSlots(status);
         updateProgress(status);
+        updateManualStatus(status);
       } catch (err) {
         console.error('Failed to load upload status:', err);
       }
@@ -245,11 +517,27 @@
       }
     }
 
-    companySelect.addEventListener('change', loadStatus);
+    companySelect.addEventListener('change', () => {
+      updateManualSectionVisibility();
+      loadStatus();
+      if (companySelect.value === 'workjapan') {
+        loadPlatformFormData();
+        loadApplicantFormData();
+      }
+    });
 
+    document.getElementById('platformMonth').addEventListener('change', loadPlatformFormData);
+    document.getElementById('applicantMonth').addEventListener('change', loadApplicantFormData);
+    document.getElementById('platformEntryForm').addEventListener('submit', handlePlatformEntry);
+    document.getElementById('applicantsEntryForm').addEventListener('submit', handleApplicantEntry);
+
+    initMonthInputs();
+    updateManualSectionVisibility();
     renderSlots();
     loadStatus();
     loadHistory();
+    loadPlatformFormData();
+    loadApplicantFormData();
   </script>
 </body>
 </html>

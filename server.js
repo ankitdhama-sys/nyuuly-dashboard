@@ -46,12 +46,79 @@ const uploadLimiter = rateLimit({
   message: { error: 'Too many uploads. Max 40 per hour.' },
 });
 
+const MANUAL_FILE_TYPES = ['platform', 'applicants'];
+
+const MONTH_NAME_TO_NUM = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
 function detectFileType(content) {
   const lines = content.split('\n').slice(0, 10).join('\n');
+  if (/UNIQUE APPLICANTS/i.test(lines) && /SCREENING PASSES/i.test(lines)) {
+    return 'applicants';
+  }
+  if (/MONTH.*PLATFORM.*REGISTRATION/i.test(lines) || /PLATFORM.*REGISTRATION.*ACTIVE/i.test(lines)) {
+    return 'platform';
+  }
   if (lines.includes('"Post ID"') || lines.includes('Post ID')) return 'social';
   if (lines.includes('Funnel') || lines.includes('Step,Device category,Active users')) return 'funnel';
   if (lines.includes('Session primary channel group')) return 'traffic';
   if (lines.includes('Page path and screen class')) return 'pages';
+  return null;
+}
+
+function parseMonthLabel(val) {
+  const s = String(val || '').trim();
+  if (!s) return null;
+
+  let match = s.match(/^(\d{4})[-/](\d{1,2})$/);
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return {
+      year,
+      month,
+      month_label: `${year} ${monthNames[month - 1] || month}`,
+    };
+  }
+
+  match = s.match(/^(\d{4})\s+([A-Za-z]{3,9})$/);
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const month = MONTH_NAME_TO_NUM[match[2].slice(0, 3).toLowerCase()];
+    if (!month) return null;
+    return { year, month, month_label: s };
+  }
+
+  match = s.match(/^([A-Za-z]{3,9})\s+(\d{4})$/);
+  if (match) {
+    const year = parseInt(match[2], 10);
+    const month = MONTH_NAME_TO_NUM[match[1].slice(0, 3).toLowerCase()];
+    if (!month) return null;
+    return { year, month, month_label: `${year} ${match[1].slice(0, 3)}` };
+  }
+
+  return null;
+}
+
+function normalizePlatform(val) {
+  const p = String(val || '').trim();
+  if (!p) return p;
+  const lower = p.toLowerCase();
+  if (lower === 'web') return 'Web';
+  if (lower === 'android') return 'Android';
+  if (lower === 'ios') return 'iOS';
+  return p;
+}
+
+function getRowValue(row, keys) {
+  for (const key of keys) {
+    if (row[key] !== undefined && row[key] !== '') return row[key];
+    const found = Object.keys(row).find((k) => k.trim().toLowerCase() === key.toLowerCase());
+    if (found && row[found] !== undefined && row[found] !== '') return row[found];
+  }
   return null;
 }
 
@@ -298,12 +365,106 @@ function parsePagesCsv(content, company) {
   return { added, skipped };
 }
 
+function parsePlatformCsv(content, company) {
+  const rows = parse(content, {
+    columns: true,
+    skip_empty_lines: true,
+    bom: true,
+    relax_column_count: true,
+  });
+
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO platform_stats
+    (company, month_label, year, month, platform, registrations, active_users)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  let added = 0;
+  let skipped = 0;
+
+  for (const row of rows) {
+    const monthVal = getRowValue(row, ['MONTH', 'Month', 'month']);
+    const platform = normalizePlatform(getRowValue(row, ['PLATFORM', 'Platform', 'platform']));
+    if (!monthVal || !platform) continue;
+
+    const parsedMonth = parseMonthLabel(monthVal);
+    if (!parsedMonth) {
+      skipped++;
+      continue;
+    }
+
+    const registrations = parseNum(getRowValue(row, ['REGISTRATION', 'REGISTRATIONS', 'Registration', 'registrations']));
+    const activeUsers = parseNum(getRowValue(row, ['ACTIVE', 'ACTIVE_USERS', 'Active', 'active_users']));
+
+    stmt.run(
+      company,
+      parsedMonth.month_label,
+      parsedMonth.year,
+      parsedMonth.month,
+      platform,
+      registrations,
+      activeUsers
+    );
+    added++;
+  }
+
+  return { added, skipped };
+}
+
+function parseApplicantsCsv(content, company) {
+  const rows = parse(content, {
+    columns: true,
+    skip_empty_lines: true,
+    bom: true,
+    relax_column_count: true,
+  });
+
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO applicant_stats
+    (company, month_label, year, month, unique_applicants, screening_passes,
+     total_applications, interviews_fixed, remaining_esp, selected)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  let added = 0;
+  let skipped = 0;
+
+  for (const row of rows) {
+    const monthVal = getRowValue(row, ['MONTH', 'Month', 'month']);
+    if (!monthVal) continue;
+
+    const parsedMonth = parseMonthLabel(monthVal);
+    if (!parsedMonth) {
+      skipped++;
+      continue;
+    }
+
+    stmt.run(
+      company,
+      parsedMonth.month_label,
+      parsedMonth.year,
+      parsedMonth.month,
+      parseNum(getRowValue(row, ['UNIQUE APPLICANTS', 'Unique Applicants', 'unique_applicants'])),
+      parseNum(getRowValue(row, ['SCREENING PASSES', 'Screening Passes', 'screening_passes'])),
+      parseNum(getRowValue(row, ['TOTAL APPLICATIONS', 'Total Applications', 'total_applications'])),
+      parseNum(getRowValue(row, ['INTERVIEWS FIXED', 'Interviews Fixed', 'interviews_fixed'])),
+      parseNum(getRowValue(row, ['REMAINING ESP', 'Remaining ESP', 'remaining_esp'])),
+      parseNum(getRowValue(row, ['SELECTED', 'Selected', 'selected']))
+    );
+    added++;
+  }
+
+  return { added, skipped };
+}
+
 function parseCsv(content, fileType, company) {
   switch (fileType) {
     case 'social': return parseSocialCsv(content, company);
     case 'funnel': return parseFunnelCsv(content, company);
     case 'traffic': return parseTrafficCsv(content, company);
     case 'pages': return parsePagesCsv(content, company);
+    case 'platform': return parsePlatformCsv(content, company);
+    case 'applicants': return parseApplicantsCsv(content, company);
     default: throw new Error('Unknown file type');
   }
 }
@@ -356,11 +517,96 @@ function buildGa4DateQuery(company, start, end, alias = '') {
   return { clause, params };
 }
 
+function buildPlatformQuery(company, start, end) {
+  return buildMonthlyStatsQuery(company, start, end);
+}
+
+function buildMonthlyStatsQuery(company, start, end) {
+  let clause = 'WHERE 1=1';
+  const params = [];
+
+  if (company && company !== 'all') {
+    clause += ' AND company = ?';
+    params.push(company);
+  }
+
+  if (start && end) {
+    clause += ` AND date(printf('%04d-%02d-01', year, month)) <= date(?)
+      AND date(printf('%04d-%02d-01', year, month), '+1 month', '-1 day') >= date(?)`;
+    params.push(end, start);
+  }
+
+  return { clause, params };
+}
+
 function logUpload(filename, company, fileType, rowsAdded, rowsSkipped) {
   db.prepare(`
     INSERT INTO upload_history (filename, company, file_type, rows_added, rows_skipped)
     VALUES (?, ?, ?, ?, ?)
   `).run(filename, company, fileType, rowsAdded, rowsSkipped);
+}
+
+function savePlatformRow(company, parsedMonth, platform, registrations, activeUsers) {
+  db.prepare(`
+    INSERT OR REPLACE INTO platform_stats
+    (company, month_label, year, month, platform, registrations, active_users)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    company,
+    parsedMonth.month_label,
+    parsedMonth.year,
+    parsedMonth.month,
+    normalizePlatform(platform),
+    parseNum(registrations),
+    parseNum(activeUsers)
+  );
+}
+
+function saveApplicantRow(company, parsedMonth, data) {
+  db.prepare(`
+    INSERT OR REPLACE INTO applicant_stats
+    (company, month_label, year, month, unique_applicants, screening_passes,
+     total_applications, interviews_fixed, remaining_esp, selected)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    company,
+    parsedMonth.month_label,
+    parsedMonth.year,
+    parsedMonth.month,
+    parseNum(data.unique_applicants),
+    parseNum(data.screening_passes),
+    parseNum(data.total_applications),
+    parseNum(data.interviews_fixed),
+    parseNum(data.remaining_esp),
+    parseNum(data.selected)
+  );
+}
+
+function getManualDataStatus(company) {
+  const platformRows = db.prepare(`
+    SELECT COUNT(*) as count, MAX(month_label) as latestMonth, MAX(upload_date) as lastUpdated
+    FROM platform_stats WHERE company = ?
+  `).get(company);
+
+  const applicantRows = db.prepare(`
+    SELECT COUNT(*) as count, MAX(month_label) as latestMonth, MAX(upload_date) as lastUpdated
+    FROM applicant_stats WHERE company = ?
+  `).get(company);
+
+  return {
+    platform: {
+      uploaded: platformRows.count > 0,
+      rowsAdded: platformRows.count,
+      latestMonth: platformRows.latestMonth,
+      uploadedAt: platformRows.lastUpdated,
+    },
+    applicants: {
+      uploaded: applicantRows.count > 0,
+      rowsAdded: applicantRows.count,
+      latestMonth: applicantRows.latestMonth,
+      uploadedAt: applicantRows.lastUpdated,
+    },
+  };
 }
 
 // --- Routes ---
@@ -379,7 +625,7 @@ app.post('/api/upload', uploadLimiter, upload.single('file'), (req, res) => {
     }
 
     const expectedType = req.body.expectedType;
-    if (expectedType && !FILE_TYPES.includes(expectedType)) {
+    if (expectedType && !FILE_TYPES.includes(expectedType) && !MANUAL_FILE_TYPES.includes(expectedType)) {
       return res.status(400).json({ error: 'Invalid expected file type' });
     }
 
@@ -412,6 +658,65 @@ app.post('/api/upload', uploadLimiter, upload.single('file'), (req, res) => {
     });
   } catch (err) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/manual/platform', uploadLimiter, (req, res) => {
+  try {
+    const { company, month, platforms } = req.body;
+    if (company !== 'workjapan') {
+      return res.status(400).json({ error: 'Platform data entry is only available for WORK JAPAN' });
+    }
+    if (!month) return res.status(400).json({ error: 'Month is required' });
+    if (!Array.isArray(platforms) || !platforms.length) {
+      return res.status(400).json({ error: 'At least one platform row is required' });
+    }
+
+    const parsedMonth = parseMonthLabel(month);
+    if (!parsedMonth) return res.status(400).json({ error: 'Invalid month format' });
+
+    let saved = 0;
+    for (const row of platforms) {
+      if (!row.platform) continue;
+      savePlatformRow(company, parsedMonth, row.platform, row.registrations, row.active_users);
+      saved++;
+    }
+
+    if (!saved) return res.status(400).json({ error: 'No valid platform rows to save' });
+
+    logUpload(`Manual entry — ${parsedMonth.month_label}`, company, 'platform', saved, 0);
+    res.json({ success: true, rowsAdded: saved, month: parsedMonth.month_label, company });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/manual/applicants', uploadLimiter, (req, res) => {
+  try {
+    const { company, month, unique_applicants, screening_passes, total_applications,
+      interviews_fixed, remaining_esp, selected } = req.body;
+
+    if (company !== 'workjapan') {
+      return res.status(400).json({ error: 'Applicant data entry is only available for WORK JAPAN' });
+    }
+    if (!month) return res.status(400).json({ error: 'Month is required' });
+
+    const parsedMonth = parseMonthLabel(month);
+    if (!parsedMonth) return res.status(400).json({ error: 'Invalid month format' });
+
+    saveApplicantRow(company, parsedMonth, {
+      unique_applicants,
+      screening_passes,
+      total_applications,
+      interviews_fixed,
+      remaining_esp,
+      selected,
+    });
+
+    logUpload(`Manual entry — ${parsedMonth.month_label}`, company, 'applicants', 1, 0);
+    res.json({ success: true, rowsAdded: 1, month: parsedMonth.month_label, company });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -515,6 +820,105 @@ app.get('/api/pages', (req, res) => {
   res.json({ rows, filter: { company, start, end } });
 });
 
+app.get('/api/platform-stats', (req, res) => {
+  const { company, start, end } = req.query;
+  const { clause, params } = buildPlatformQuery(company, start, end);
+
+  const rows = db.prepare(`
+    SELECT * FROM platform_stats ${clause}
+    ORDER BY year, month, platform
+  `).all(...params);
+
+  const kpis = db.prepare(`
+    SELECT
+      COALESCE(SUM(registrations), 0) as totalRegistrations,
+      COALESCE(SUM(active_users), 0) as totalActiveUsers
+    FROM platform_stats ${clause}
+  `).get(...params);
+
+  const months = [...new Set(rows.map((r) => r.month_label))].sort((a, b) => {
+    const ra = rows.find((r) => r.month_label === a);
+    const rb = rows.find((r) => r.month_label === b);
+    return (ra.year * 12 + ra.month) - (rb.year * 12 + rb.month);
+  });
+
+  const platforms = [...new Set(rows.map((r) => r.platform))].sort();
+
+  const byMonth = months.map((monthLabel) => {
+    const monthRows = rows.filter((r) => r.month_label === monthLabel);
+    return {
+      month_label: monthLabel,
+      year: monthRows[0]?.year,
+      month: monthRows[0]?.month,
+      registrations: monthRows.reduce((s, r) => s + r.registrations, 0),
+      active_users: monthRows.reduce((s, r) => s + r.active_users, 0),
+      platforms: monthRows.map((r) => ({
+        platform: r.platform,
+        registrations: r.registrations,
+        active_users: r.active_users,
+      })),
+    };
+  });
+
+  const byPlatform = platforms.map((platform) => {
+    const platformRows = rows.filter((r) => r.platform === platform);
+    return {
+      platform,
+      registrations: platformRows.reduce((s, r) => s + r.registrations, 0),
+      active_users: platformRows.reduce((s, r) => s + r.active_users, 0),
+    };
+  });
+
+  res.json({
+    rows,
+    byMonth,
+    byPlatform,
+    months,
+    platforms,
+    kpis,
+    filter: { company, start, end },
+  });
+});
+
+app.get('/api/applicant-stats', (req, res) => {
+  const { company, start, end } = req.query;
+  const { clause, params } = buildMonthlyStatsQuery(company, start, end);
+
+  const rows = db.prepare(`
+    SELECT * FROM applicant_stats ${clause}
+    ORDER BY year, month
+  `).all(...params);
+
+  const kpis = db.prepare(`
+    SELECT
+      COALESCE(SUM(unique_applicants), 0) as uniqueApplicants,
+      COALESCE(SUM(screening_passes), 0) as screeningPasses,
+      COALESCE(SUM(total_applications), 0) as totalApplications,
+      COALESCE(SUM(interviews_fixed), 0) as interviewsFixed,
+      COALESCE(SUM(remaining_esp), 0) as remainingEsp,
+      COALESCE(SUM(selected), 0) as selected
+    FROM applicant_stats ${clause}
+  `).get(...params);
+
+  const latest = rows.length ? rows[rows.length - 1] : null;
+
+  const funnelSteps = latest ? [
+    { label: 'Unique Applicants', value: latest.unique_applicants },
+    { label: 'Screening Passes', value: latest.screening_passes },
+    { label: 'Total Applications', value: latest.total_applications },
+    { label: 'Interviews Fixed', value: latest.interviews_fixed },
+    { label: 'Selected', value: latest.selected },
+  ] : [];
+
+  res.json({
+    rows,
+    kpis,
+    latest,
+    funnelSteps,
+    filter: { company, start, end },
+  });
+});
+
 app.get('/api/summary', (req, res) => {
   const { company, start, end } = req.query;
   const socialQ = buildSocialQuery(company, start, end);
@@ -594,14 +998,20 @@ app.get('/api/upload-status', (req, res) => {
   }
 
   const uploadedCount = FILE_TYPES.filter((t) => files[t].uploaded).length;
+  const manualFiles = getManualDataStatus(company);
 
   res.json({
     company,
     files,
+    manualFiles,
     uploadedCount,
     totalRequired: FILE_TYPES.length,
     allComplete: uploadedCount === FILE_TYPES.length,
-    fileTypeLabels: FILE_TYPE_LABELS,
+    fileTypeLabels: {
+      ...FILE_TYPE_LABELS,
+      platform: 'Platform Registrations (Manual)',
+      applicants: 'Job Seeker Applications (Manual)',
+    },
   });
 });
 
@@ -857,7 +1267,7 @@ app.delete('/api/data', (req, res) => {
     return res.status(400).json({ error: 'Must pass confirm=yes' });
   }
 
-  const allowedTables = ['social_posts', 'funnel_data', 'traffic_acquisition', 'pages_screens'];
+  const allowedTables = ['social_posts', 'funnel_data', 'traffic_acquisition', 'pages_screens', 'platform_stats', 'applicant_stats'];
   if (!allowedTables.includes(table)) {
     return res.status(400).json({ error: 'Invalid table name' });
   }

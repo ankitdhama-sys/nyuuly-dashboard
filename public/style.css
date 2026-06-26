@@ -614,6 +614,109 @@ tr:hover td {
   white-space: nowrap;
 }
 
+.manual-upload-section {
+  margin-bottom: 2rem;
+  padding: 1.25rem;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.manual-upload-section h2 {
+  font-size: 1.1rem;
+  margin-bottom: 0.35rem;
+}
+
+.manual-upload-section > p {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.manual-upload-section code {
+  font-size: 0.8rem;
+  background: var(--bg);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.entry-form {
+  margin-top: 0.75rem;
+}
+
+.entry-form-row {
+  margin-bottom: 1rem;
+  max-width: 220px;
+}
+
+.entry-form-row label,
+.entry-field label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.entry-form-row input[type="month"],
+.entry-field input[type="number"] {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.entry-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.entry-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.entry-table th,
+.entry-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.entry-table th {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.entry-table td:first-child {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.entry-table input[type="number"] {
+  width: 100%;
+  min-width: 100px;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.entry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.entry-slot .btn-slot {
+  width: auto;
+}
+
 .upload-card {
   background: var(--bg-card);
   border: 1px solid var(--border);

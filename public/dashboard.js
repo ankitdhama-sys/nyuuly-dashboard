@@ -5,6 +5,11 @@ const COLORS = {
   workjapanLight: 'rgba(255, 107, 53, 0.6)',
   grid: 'rgba(136, 146, 176, 0.15)',
   text: '#8892b0',
+  platform: {
+    Web: '#4F8EF7',
+    Android: '#34d399',
+    iOS: '#a78bfa',
+  },
 };
 
 const charts = {};
@@ -142,6 +147,184 @@ function syncStateFromUI() {
     const { start } = getDateRange();
     startInput.value = start;
   }
+}
+
+function renderPlatformKpis(kpis) {
+  const el = document.getElementById('platformKpis');
+  if (!el) return;
+  if (!kpis || (!kpis.totalRegistrations && !kpis.totalActiveUsers)) {
+    el.innerHTML = '<div class="empty-state">No platform data — <a href="/upload">enter data on upload page</a></div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="kpi-card"><div class="label">Total Registrations</div><div class="value">${formatNum(kpis.totalRegistrations)}</div></div>
+    <div class="kpi-card"><div class="label">Total Active Users</div><div class="value">${formatNum(kpis.totalActiveUsers)}</div></div>
+  `;
+}
+
+function renderChartRegistrationsByMonth(byMonth, platforms) {
+  destroyChart('chartRegistrationsByMonth');
+  const ctx = document.getElementById('chartRegistrationsByMonth');
+  if (!ctx || !byMonth?.length) return;
+
+  const labels = byMonth.map((m) => m.month_label);
+  const platformList = platforms?.length ? platforms : ['Web', 'Android', 'iOS'];
+
+  charts.chartRegistrationsByMonth = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: platformList.map((platform) => ({
+        label: platform,
+        data: byMonth.map((month) => {
+          const row = month.platforms?.find((p) => p.platform === platform);
+          return row ? row.registrations : 0;
+        }),
+        backgroundColor: COLORS.platform[platform] || COLORS.nyuuly,
+      })),
+    },
+    options: {
+      ...chartDefaults(),
+      scales: {
+        x: { stacked: false, ticks: { color: COLORS.text }, grid: { color: COLORS.grid } },
+        y: { ticks: { color: COLORS.text }, grid: { color: COLORS.grid } },
+      },
+    },
+  });
+}
+
+function renderChartActiveByPlatform(byPlatform) {
+  destroyChart('chartActiveByPlatform');
+  const ctx = document.getElementById('chartActiveByPlatform');
+  if (!ctx || !byPlatform?.length) return;
+
+  charts.chartActiveByPlatform = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: byPlatform.map((p) => p.platform),
+      datasets: [{
+        label: 'Active Users',
+        data: byPlatform.map((p) => p.active_users),
+        backgroundColor: byPlatform.map((p) => COLORS.platform[p.platform] || COLORS.workjapan),
+      }],
+    },
+    options: chartDefaults(),
+  });
+}
+
+function renderPlatformTable(rows) {
+  const table = document.getElementById('platformTable');
+  if (!table) return;
+
+  if (!rows?.length) {
+    table.querySelector('thead').innerHTML = '';
+    table.querySelector('tbody').innerHTML = '<tr><td colspan="4" class="empty-state">No platform data for this date range</td></tr>';
+    return;
+  }
+
+  table.querySelector('thead').innerHTML = '<tr><th>Month</th><th>Platform</th><th>Registrations</th><th>Active Users</th></tr>';
+  table.querySelector('tbody').innerHTML = rows.map((r) => `
+    <tr>
+      <td>${r.month_label}</td>
+      <td>${r.platform}</td>
+      <td>${formatNum(r.registrations)}</td>
+      <td>${formatNum(r.active_users)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderApplicantKpis(kpis, latest) {
+  const el = document.getElementById('applicantKpis');
+  if (!el) return;
+  if (!latest && (!kpis || !kpis.uniqueApplicants)) {
+    el.innerHTML = '<div class="empty-state">No applicant data — <a href="/upload">enter data on upload page</a></div>';
+    return;
+  }
+  const data = latest || kpis;
+  el.innerHTML = `
+    <div class="kpi-card"><div class="label">Unique Applicants</div><div class="value">${formatNum(data.unique_applicants ?? data.uniqueApplicants)}</div></div>
+    <div class="kpi-card"><div class="label">Screening Passes</div><div class="value">${formatNum(data.screening_passes ?? data.screeningPasses)}</div></div>
+    <div class="kpi-card"><div class="label">Total Applications</div><div class="value">${formatNum(data.total_applications ?? data.totalApplications)}</div></div>
+    <div class="kpi-card"><div class="label">Interviews Fixed</div><div class="value">${formatNum(data.interviews_fixed ?? data.interviewsFixed)}</div></div>
+    <div class="kpi-card"><div class="label">Remaining ESP</div><div class="value">${formatNum(data.remaining_esp ?? data.remainingEsp)}</div></div>
+    <div class="kpi-card"><div class="label">Selected</div><div class="value">${formatNum(data.selected)}</div></div>
+  `;
+}
+
+function renderChartApplicantFunnel(funnelSteps, monthLabel) {
+  destroyChart('chartApplicantFunnel');
+  const ctx = document.getElementById('chartApplicantFunnel');
+  if (!ctx || !funnelSteps?.length) return;
+
+  charts.chartApplicantFunnel = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: funnelSteps.map((s) => s.label),
+      datasets: [{
+        label: monthLabel ? `Count (${monthLabel})` : 'Count',
+        data: funnelSteps.map((s) => s.value),
+        backgroundColor: [COLORS.nyuuly, '#a78bfa', COLORS.workjapan, '#34d399', '#facc15'],
+      }],
+    },
+    options: {
+      ...chartDefaults(),
+      indexAxis: 'y',
+    },
+  });
+}
+
+function renderChartApplicantsByMonth(rows) {
+  destroyChart('chartApplicantsByMonth');
+  const ctx = document.getElementById('chartApplicantsByMonth');
+  if (!ctx || !rows?.length) return;
+
+  charts.chartApplicantsByMonth = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map((r) => r.month_label),
+      datasets: [
+        { label: 'Unique Applicants', data: rows.map((r) => r.unique_applicants), backgroundColor: COLORS.nyuuly },
+        { label: 'Total Applications', data: rows.map((r) => r.total_applications), backgroundColor: COLORS.workjapan },
+        { label: 'Interviews Fixed', data: rows.map((r) => r.interviews_fixed), backgroundColor: '#34d399' },
+        { label: 'Selected', data: rows.map((r) => r.selected), backgroundColor: '#facc15' },
+      ],
+    },
+    options: chartDefaults(),
+  });
+}
+
+function renderApplicantTable(rows) {
+  const table = document.getElementById('applicantTable');
+  if (!table) return;
+
+  if (!rows?.length) {
+    table.querySelector('thead').innerHTML = '';
+    table.querySelector('tbody').innerHTML = '<tr><td colspan="7" class="empty-state">No applicant data for this date range</td></tr>';
+    return;
+  }
+
+  table.querySelector('thead').innerHTML = `
+    <tr>
+      <th>Month</th>
+      <th>Unique Applicants</th>
+      <th>Screening Passes</th>
+      <th>Total Applications</th>
+      <th>Interviews Fixed</th>
+      <th>Remaining ESP</th>
+      <th>Selected</th>
+    </tr>
+  `;
+  table.querySelector('tbody').innerHTML = rows.map((r) => `
+    <tr>
+      <td>${r.month_label}</td>
+      <td>${formatNum(r.unique_applicants)}</td>
+      <td>${formatNum(r.screening_passes)}</td>
+      <td>${formatNum(r.total_applications)}</td>
+      <td>${formatNum(r.interviews_fixed)}</td>
+      <td>${formatNum(r.remaining_esp)}</td>
+      <td>${formatNum(r.selected)}</td>
+    </tr>
+  `).join('');
 }
 
 function renderDataStatus(completeness) {
@@ -1021,20 +1204,49 @@ function renderPagination(containerId, current, total, onChange) {
   document.getElementById(`${containerId}_next`)?.addEventListener('click', () => onChange(current + 1));
 }
 
+function updateWorkJapanOnlySections() {
+  const show = state.company === 'workjapan';
+  document.getElementById('section-platform').style.display = show ? '' : 'none';
+  document.getElementById('section-applicants').style.display = show ? '' : 'none';
+}
+
 async function loadDashboard() {
   const q = buildQuery();
   document.body.classList.add('is-loading');
+  updateWorkJapanOnlySections();
 
   try {
-    const [social, funnel, traffic, pages, journeys] = await Promise.all([
+    const isWorkJapan = state.company === 'workjapan';
+    const fetches = [
       fetchJSON(`/api/social?${q}`),
       fetchJSON(`/api/funnel?${q}`),
       fetchJSON(`/api/traffic?${q}`),
       fetchJSON(`/api/pages?${q}`),
       fetchJSON(`/api/journeys?${q}`),
-    ]);
+    ];
+    if (isWorkJapan) {
+      fetches.push(fetchJSON(`/api/platform-stats?${q}`));
+      fetches.push(fetchJSON(`/api/applicant-stats?${q}`));
+    }
+
+    const results = await Promise.all(fetches);
+    const [social, funnel, traffic, pages, journeys, platform, applicants] = isWorkJapan
+      ? results
+      : [...results, null, null];
 
     updateFilterLabel(journeys.filter || social.filter);
+
+    if (isWorkJapan) {
+      renderPlatformKpis(platform.kpis);
+      renderChartRegistrationsByMonth(platform.byMonth, platform.platforms);
+      renderChartActiveByPlatform(platform.byPlatform);
+      renderPlatformTable(platform.rows);
+
+      renderApplicantKpis(applicants.kpis, applicants.latest);
+      renderChartApplicantFunnel(applicants.funnelSteps, applicants.latest?.month_label);
+      renderChartApplicantsByMonth(applicants.rows);
+      renderApplicantTable(applicants.rows);
+    }
 
     journeyData = journeys;
     if (!journeys.journeys?.some((j) => j.id === state.activeJourney)) {

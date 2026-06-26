@@ -93,6 +93,35 @@ function initDb() {
       rows_skipped INTEGER,
       uploaded_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS platform_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company TEXT NOT NULL,
+      month_label TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      platform TEXT NOT NULL,
+      registrations INTEGER DEFAULT 0,
+      active_users INTEGER DEFAULT 0,
+      upload_date TEXT DEFAULT (date('now')),
+      UNIQUE(company, month_label, platform)
+    );
+
+    CREATE TABLE IF NOT EXISTS applicant_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company TEXT NOT NULL,
+      month_label TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      unique_applicants INTEGER DEFAULT 0,
+      screening_passes INTEGER DEFAULT 0,
+      total_applications INTEGER DEFAULT 0,
+      interviews_fixed INTEGER DEFAULT 0,
+      remaining_esp INTEGER DEFAULT 0,
+      selected INTEGER DEFAULT 0,
+      upload_date TEXT DEFAULT (date('now')),
+      UNIQUE(company, month_label)
+    );
   `);
 }
 
