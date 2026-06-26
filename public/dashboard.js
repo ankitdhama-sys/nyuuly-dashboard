@@ -9,8 +9,8 @@ const COLORS = {
 
 const charts = {};
 let state = {
-  company: 'all',
-  dateRange: '7',
+  company: 'workjapan',
+  dateRange: '90',
   startDate: null,
   endDate: null,
   activeJourney: 'awareness',
@@ -30,7 +30,10 @@ let pagesSort = { col: 'views', dir: 'desc' };
 
 function formatNum(n) {
   if (n == null) return '0';
-  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 1 });
+  const num = Number(n);
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+  if (num >= 10_000) return (num / 1_000).toFixed(1) + 'K';
+  return num.toLocaleString('en-US', { maximumFractionDigits: 1 });
 }
 
 function formatPct(n) {
@@ -147,6 +150,11 @@ function renderJourneyTabs(journeys) {
 
 function renderJourneyPanel(data) {
   const panel = document.getElementById('journeyPanel');
+  const intro = document.getElementById('journeyIntro');
+  if (intro && data?.companyLabel) {
+    intro.textContent = `${data.companyLabel} customer journeys — built from your 4 weekly CSVs (social, traffic, pages, funnel).`;
+  }
+
   if (!data || !data.journeys?.length) {
     panel.innerHTML = '<div class="empty-state">Upload all 4 CSV files on the <a href="/upload">upload page</a> to see customer journeys.</div>';
     return;
@@ -166,23 +174,30 @@ function renderJourneyPanel(data) {
   `;
 
   if (journey.id === 'awareness') {
+    const isWj = data.company === 'workjapan';
     html += `
       <div class="kpi-row">
-        <div class="kpi-card"><div class="label">Social Views</div><div class="value">${formatNum(journey.kpis.socialViews)}</div></div>
-        <div class="kpi-card"><div class="label">Social Reach</div><div class="value">${formatNum(journey.kpis.socialReach)}</div></div>
+        <div class="kpi-card"><div class="label">${isWj ? 'Instagram Post Views' : 'Social Views'}</div><div class="value">${formatNum(journey.kpis.socialViews)}</div></div>
+        <div class="kpi-card"><div class="label">${isWj ? 'Instagram Reach' : 'Social Reach'}</div><div class="value">${formatNum(journey.kpis.socialReach)}</div></div>
+        <div class="kpi-card"><div class="label">${isWj ? 'Job Posts' : 'Social Engagement'}</div><div class="value">${formatNum(isWj ? journey.kpis.postCount : journey.kpis.socialEngagement)}</div></div>
         <div class="kpi-card"><div class="label">Website Sessions</div><div class="value">${formatNum(journey.kpis.sessions)}</div></div>
         <div class="kpi-card"><div class="label">Engagement Rate</div><div class="value">${formatPct(journey.kpis.engagementRate)}</div></div>
       </div>
       <h4 class="subsection-title">Top Arrival Channels</h4>
       <div class="table-wrap"><table>
-        <thead><tr><th>Channel</th><th>Sessions</th><th>Engaged Sessions</th></tr></thead>
+        <thead><tr><th>Channel</th><th>Sessions</th><th>Engaged Sessions</th>${isWj ? '<th>Eng. Rate</th>' : ''}</tr></thead>
         <tbody>${(journey.topChannels || []).map((c) => `
-          <tr><td>${c.channel}</td><td>${formatNum(c.sessions)}</td><td>${formatNum(c.engagedSessions)}</td></tr>
-        `).join('') || '<tr><td colspan="3" class="empty-state">No traffic data</td></tr>'}
+          <tr>
+            <td>${c.channel}</td>
+            <td>${formatNum(c.sessions)}</td>
+            <td>${formatNum(c.engagedSessions)}</td>
+            ${isWj ? `<td>${formatPct(c.engagementRate)}</td>` : ''}
+          </tr>
+        `).join('') || '<tr><td colspan="4" class="empty-state">No traffic data</td></tr>'}
         </tbody>
       </table></div>
     `;
-  } else if (journey.id === 'explore-no-action') {
+  } else if (journey.id === 'browse-jobs' || journey.id === 'explore-no-action') {
     html += `
       <div class="kpi-row">
         <div class="kpi-card"><div class="label">Exploration Page Views</div><div class="value">${formatNum(journey.kpis.pageViews)}</div></div>
@@ -198,7 +213,20 @@ function renderJourneyPanel(data) {
         `<span class="channel-chip">${c.channel}: ${formatNum(c.sessions)}</span>`
       ).join('') || '<span class="channel-chip muted">Upload traffic CSV</span>'}</div>
     `;
-  } else if (journey.id === 'explore-convert') {
+  } else if (journey.id === 'job-detail') {
+    html += `
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="label">Job Page Views</div><div class="value">${formatNum(journey.kpis.pageViews)}</div></div>
+        <div class="kpi-card"><div class="label">Active Users</div><div class="value">${formatNum(journey.kpis.activeUsers)}</div></div>
+        <div class="kpi-card"><div class="label">Unique Job Pages</div><div class="value">${formatNum(journey.kpis.uniqueJobPages)}</div></div>
+        <div class="kpi-card"><div class="label">Views per User</div><div class="value">${formatNum(journey.kpis.viewsPerUser)}</div></div>
+      </div>
+      <h4 class="subsection-title">Top Job Categories</h4>
+      ${renderJobCategoriesTable(journey.topJobCategories)}
+      <h4 class="subsection-title">Top Individual Job Pages</h4>
+      ${renderPageListTable(journey.topPages)}
+    `;
+  } else if (journey.id === 'register-apply' || journey.id === 'explore-convert') {
     html += `
       <div class="kpi-row">
         <div class="kpi-card"><div class="label">Conversion Page Views</div><div class="value">${formatNum(journey.kpis.pageViews)}</div></div>
@@ -210,6 +238,15 @@ function renderJourneyPanel(data) {
       <h4 class="subsection-title">Sign-up &amp; Subscribe Pages</h4>
       ${renderPageListTable(journey.topPages, true)}
     `;
+  } else if (journey.id === 'employer') {
+    html += `
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="label">Employer Page Views</div><div class="value">${formatNum(journey.kpis.pageViews)}</div></div>
+        <div class="kpi-card"><div class="label">Active Users</div><div class="value">${formatNum(journey.kpis.activeUsers)}</div></div>
+      </div>
+      <h4 class="subsection-title">Top Employer Pages</h4>
+      ${renderPageListTable(journey.topPages)}
+    `;
   } else if (journey.id === 'welcome-package') {
     html += `
       <div class="kpi-row">
@@ -220,7 +257,7 @@ function renderJourneyPanel(data) {
       ${renderPageListTable(journey.topPages)}
       <p class="journey-note">This journey is marked as future — data will grow when the welcome package flow goes live.</p>
     `;
-  } else if (journey.id === 'wj-application') {
+  } else if (journey.id === 'seeker-application' || journey.id === 'nyuuly-application' || journey.id === 'wj-application') {
     html += `
       <div class="kpi-row">
         <div class="kpi-card"><div class="label">Funnel Started</div><div class="value">${formatNum(journey.kpis.started)}</div></div>
@@ -228,8 +265,9 @@ function renderJourneyPanel(data) {
         <div class="kpi-card"><div class="label">Overall Completion</div><div class="value">${formatPct(journey.kpis.overallCompletion)}</div></div>
         <div class="kpi-card abandon-red"><div class="label">Biggest Drop-off</div><div class="value" style="font-size:1rem">${journey.kpis.biggestDropOffStep} (${formatPct(journey.kpis.biggestDropOffPct)})</div></div>
       </div>
-      <h4 class="subsection-title">Application Steps (from Pages CSV)</h4>
+      <h4 class="subsection-title">${data.company === 'workjapan' ? 'Job Seeker Application Steps' : 'Application Steps'} (from Pages CSV)</h4>
       ${renderApplicationFunnel(journey.applicationFunnel)}
+      ${journey.topJobCategories?.length ? `<h4 class="subsection-title">Top Job Categories in Funnel</h4>${renderJobCategoriesTable(journey.topJobCategories)}` : ''}
     `;
   }
 
@@ -241,8 +279,8 @@ function renderJourneyPanel(data) {
   </div>`;
   panel.innerHTML = html;
 
-  const hasChart = (journey.id === 'wj-application' && journey.applicationFunnel?.length)
-    || (journey.ga4Funnel?.length && journey.id !== 'awareness' && journey.id !== 'welcome-package');
+  const hasChart = (['seeker-application', 'nyuuly-application', 'wj-application'].includes(journey.id) && journey.applicationFunnel?.length)
+    || (journey.ga4Funnel?.length && !['awareness', 'welcome-package', 'employer', 'job-detail'].includes(journey.id));
   const chartWrap = document.getElementById('journeyChartWrap');
   if (chartWrap) chartWrap.style.display = hasChart ? 'block' : 'none';
   if (hasChart) renderChartJourneyFunnel(journey);
@@ -261,6 +299,21 @@ function renderMiniFunnel(steps) {
       </div>
     `).join('')}</div>
   `;
+}
+
+function renderJobCategoriesTable(categories) {
+  if (!categories?.length) return '<p class="journey-note">No job category data.</p>';
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Job Category</th><th>Job Listings</th><th>Views</th><th>Users</th></tr></thead>
+    <tbody>${categories.map((c) => `
+      <tr>
+        <td>${c.category}</td>
+        <td>${formatNum(c.jobs)}</td>
+        <td>${formatNum(c.views)}</td>
+        <td>${formatNum(c.users)}</td>
+      </tr>
+    `).join('')}</tbody>
+  </table></div>`;
 }
 
 function renderPageListTable(pages, showKeyEvents = false) {
@@ -948,6 +1001,9 @@ async function loadDashboard() {
     ]);
 
     journeyData = journeys;
+    if (!journeys.journeys?.some((j) => j.id === state.activeJourney)) {
+      state.activeJourney = journeys.journeys?.[0]?.id || 'awareness';
+    }
     renderDataStatus(journeys.dataCompleteness);
     renderJourneyTabs(journeys.journeys || []);
     renderJourneyPanel(journeys);
@@ -989,6 +1045,7 @@ function initControls() {
     document.querySelectorAll('#companyTabs .tab-btn').forEach(b => b.classList.remove('active'));
     e.target.classList.add('active');
     state.company = e.target.dataset.company;
+    state.activeJourney = 'awareness';
     loadDashboard();
   });
 

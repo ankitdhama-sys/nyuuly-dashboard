@@ -6,12 +6,17 @@ const rateLimit = require('express-rate-limit');
 const { parse } = require('csv-parse/sync');
 const { db, initDb } = require('./database/db');
 const {
-  JOURNEYS,
   FILE_TYPES,
   FILE_TYPE_LABELS,
+  COMPANY_LABELS,
+  getJourneys,
+  resolveCompany,
   aggregatePagesForJourney,
+  aggregateJobDetails,
+  getTopJobCategories,
   buildApplicationFunnel,
   buildGa4FunnelSteps,
+  getLandingPages,
 } = require('./journey-config');
 
 const app = express();
@@ -198,6 +203,11 @@ function parseGa4Header(content) {
   return { startDate, endDate };
 }
 
+function getTrafficChannel(row) {
+  const key = Object.keys(row).find((k) => k.toLowerCase().includes('session primary channel group'));
+  return key ? row[key] : null;
+}
+
 function parseTrafficCsv(content, company) {
   const { startDate, endDate } = parseGa4Header(content);
   const lines = content.split('\n');
@@ -215,7 +225,7 @@ function parseTrafficCsv(content, company) {
   let skipped = 0;
 
   for (const row of rows) {
-    const channel = row['Session primary channel group (Default channel group)'];
+    const channel = getTrafficChannel(row);
     if (!channel) continue;
 
     const result = stmt.run(
@@ -595,6 +605,8 @@ app.get('/api/upload-status', (req, res) => {
 
 app.get('/api/journeys', (req, res) => {
   const { company, start, end } = req.query;
+  const journeyCompany = resolveCompany(company);
+  const journeysConfig = getJourneys(journeyCompany);
   const socialQ = buildSocialQuery(company, start, end);
   const ga4Q = buildGa4DateQuery(company, start, end);
 
@@ -602,7 +614,8 @@ app.get('/api/journeys', (req, res) => {
     SELECT
       COALESCE(SUM(views), 0) as totalViews,
       COALESCE(SUM(reach), 0) as totalReach,
-      COALESCE(SUM(likes + comments + shares + saves), 0) as totalEngagement
+      COALESCE(SUM(likes + comments + shares + saves), 0) as totalEngagement,
+      COUNT(*) as postCount
     FROM social_posts ${socialQ.clause}
   `).get(...socialQ.params);
 
@@ -645,17 +658,11 @@ app.get('/api/journeys', (req, res) => {
   `).all(...funnelParams);
 
   const ga4Funnel = buildGa4FunnelSteps(funnelRows);
-  const exploreAgg = aggregatePagesForJourney(pages, JOURNEYS.find((j) => j.id === 'explore-no-action'));
-  const convertAgg = aggregatePagesForJourney(pages, JOURNEYS.find((j) => j.id === 'explore-convert'));
-  const welcomeAgg = aggregatePagesForJourney(pages, JOURNEYS.find((j) => j.id === 'welcome-package'));
-  const wjJourney = JOURNEYS.find((j) => j.id === 'wj-application');
-  const applicationFunnel = buildApplicationFunnel(pages, wjJourney.applicationSteps);
-
   const funnelEntryUsers = ga4Funnel[0]?.users || trafficKpis.totalSessions || 0;
-  const funnelEndUsers = ga4Funnel[ga4Funnel.length - 1]?.users || 0;
-  const browseOnlyUsers = Math.max(0, funnelEntryUsers - convertAgg.totalUsers - welcomeAgg.totalUsers);
+  const jobDetailAgg = aggregateJobDetails(pages);
+  const topJobCategories = journeyCompany === 'workjapan' ? getTopJobCategories(pages) : [];
 
-  const journeys = JOURNEYS.map((j) => {
+  const journeys = journeysConfig.map((j) => {
     const base = {
       id: j.id,
       title: j.title,
@@ -663,6 +670,7 @@ app.get('/api/journeys', (req, res) => {
       description: j.description,
       status: j.status,
       sources: j.sources,
+      company: journeyCompany,
     };
 
     if (j.id === 'awareness') {
@@ -672,6 +680,7 @@ app.get('/api/journeys', (req, res) => {
           socialViews: socialKpis.totalViews,
           socialReach: socialKpis.totalReach,
           socialEngagement: socialKpis.totalEngagement,
+          postCount: socialKpis.postCount,
           sessions: trafficKpis.totalSessions,
           engagedSessions: trafficKpis.totalEngagedSessions,
           engagementRate: trafficKpis.engagementRate,
@@ -680,12 +689,16 @@ app.get('/api/journeys', (req, res) => {
           channel: r.channel_group,
           sessions: r.sessions,
           engagedSessions: r.engaged_sessions,
+          engagementRate: r.engagement_rate,
         })),
       };
     }
 
-    if (j.id === 'explore-no-action') {
-      const agg = exploreAgg;
+    if (j.id === 'browse-jobs' || j.id === 'explore-no-action') {
+      const agg = aggregatePagesForJourney(pages, j);
+      const convertJourney = journeysConfig.find((x) => x.id === 'register-apply' || x.id === 'explore-convert');
+      const convertAgg = convertJourney ? aggregatePagesForJourney(pages, convertJourney) : { totalUsers: 0 };
+      const browseOnlyUsers = Math.max(0, funnelEntryUsers - convertAgg.totalUsers);
       return {
         ...base,
         kpis: {
@@ -710,8 +723,30 @@ app.get('/api/journeys', (req, res) => {
       };
     }
 
-    if (j.id === 'explore-convert') {
-      const agg = convertAgg;
+    if (j.id === 'job-detail') {
+      const agg = jobDetailAgg;
+      return {
+        ...base,
+        kpis: {
+          pageViews: agg.totalViews,
+          activeUsers: agg.totalUsers,
+          uniqueJobPages: agg.pages.length,
+          viewsPerUser: agg.totalUsers > 0
+            ? Math.round((agg.totalViews / agg.totalUsers) * 10) / 10
+            : 0,
+        },
+        topPages: agg.pages.slice(0, 10).map((p) => ({
+          path: p.page_path,
+          views: p.views,
+          users: p.active_users,
+          avgTime: p.avg_engagement_time,
+        })),
+        topJobCategories,
+      };
+    }
+
+    if (j.id === 'register-apply' || j.id === 'explore-convert') {
+      const agg = aggregatePagesForJourney(pages, j);
       return {
         ...base,
         kpis: {
@@ -727,13 +762,31 @@ app.get('/api/journeys', (req, res) => {
           views: p.views,
           users: p.active_users,
           keyEvents: p.key_events,
+          avgTime: p.avg_engagement_time,
         })),
         ga4Funnel,
       };
     }
 
+    if (j.id === 'employer') {
+      const agg = aggregatePagesForJourney(pages, j);
+      return {
+        ...base,
+        kpis: {
+          pageViews: agg.totalViews,
+          activeUsers: agg.totalUsers,
+        },
+        topPages: agg.pages.slice(0, 10).map((p) => ({
+          path: p.page_path,
+          views: p.views,
+          users: p.active_users,
+          avgTime: p.avg_engagement_time,
+        })),
+      };
+    }
+
     if (j.id === 'welcome-package') {
-      const agg = welcomeAgg;
+      const agg = aggregatePagesForJourney(pages, j);
       return {
         ...base,
         kpis: {
@@ -750,7 +803,8 @@ app.get('/api/journeys', (req, res) => {
       };
     }
 
-    if (j.id === 'wj-application') {
+    if (j.id === 'seeker-application' || j.id === 'nyuuly-application' || j.id === 'wj-application') {
+      const applicationFunnel = buildApplicationFunnel(pages, j.applicationSteps);
       const biggestDrop = applicationFunnel.reduce(
         (max, step, i) => (i > 0 && step.dropOffPct > (max?.dropOffPct || 0) ? step : max),
         null
@@ -758,11 +812,14 @@ app.get('/api/journeys', (req, res) => {
       return {
         ...base,
         kpis: {
-          started: applicationFunnel[0]?.users || 0,
-          completed: applicationFunnel[applicationFunnel.length - 1]?.users || 0,
-          overallCompletion: applicationFunnel[0]?.users > 0
+          started: applicationFunnel[0]?.users || applicationFunnel[0]?.views || 0,
+          completed: applicationFunnel[applicationFunnel.length - 1]?.users
+            || applicationFunnel[applicationFunnel.length - 1]?.views || 0,
+          overallCompletion: (applicationFunnel[0]?.users || applicationFunnel[0]?.views) > 0
             ? Math.round(
-                (applicationFunnel[applicationFunnel.length - 1].users / applicationFunnel[0].users) * 1000
+                ((applicationFunnel[applicationFunnel.length - 1].users
+                  || applicationFunnel[applicationFunnel.length - 1].views)
+                  / (applicationFunnel[0].users || applicationFunnel[0].views)) * 1000
               ) / 10
             : 0,
           biggestDropOffStep: biggestDrop?.label || '—',
@@ -770,6 +827,7 @@ app.get('/api/journeys', (req, res) => {
         },
         applicationFunnel,
         ga4Funnel,
+        topJobCategories: j.id === 'seeker-application' ? topJobCategories.slice(0, 5) : undefined,
       };
     }
 
@@ -783,28 +841,13 @@ app.get('/api/journeys', (req, res) => {
     pages: pages.length > 0,
   };
 
-  const landingPages = pages
-    .filter((p) => ['/', '/ja', '/mobile', '/compass', '/welcome-package'].includes(p.page_path)
-      || p.page_path.match(/^\/(about|info-hub)/))
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 8)
-    .map((p) => ({
-      path: p.page_path,
-      views: p.views,
-      users: p.active_users,
-      viewsPerUser: p.views_per_user,
-      nextLikely: pages
-        .filter((other) => other.page_path !== p.page_path && other.views > 0)
-        .sort((a, b) => b.views - a.views)
-        .slice(0, 3)
-        .map((o) => o.page_path),
-    }));
-
   res.json({
     journeys,
-    landingPages,
+    landingPages: getLandingPages(pages, journeyCompany),
     dataCompleteness,
     completenessCount: Object.values(dataCompleteness).filter(Boolean).length,
+    company: journeyCompany,
+    companyLabel: COMPANY_LABELS[journeyCompany],
   });
 });
 
