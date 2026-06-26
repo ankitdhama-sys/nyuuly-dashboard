@@ -2,14 +2,12 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const basicAuth = require('basic-auth');
 const rateLimit = require('express-rate-limit');
 const { parse } = require('csv-parse/sync');
 const { db, initDb } = require('./database/db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const UPLOAD_PASSWORD = process.env.UPLOAD_PASSWORD || 'changeme';
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -28,24 +26,6 @@ const uploadLimiter = rateLimit({
   max: 10,
   message: { error: 'Too many uploads. Max 10 per hour.' },
 });
-
-function requireAuth(req, res, next) {
-  const credentials = basicAuth(req);
-  if (!credentials || credentials.name !== 'admin' || credentials.pass !== UPLOAD_PASSWORD) {
-    res.set('WWW-Authenticate', 'Basic realm="Upload"');
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
-
-function requireAuthPage(req, res, next) {
-  const credentials = basicAuth(req);
-  if (!credentials || credentials.name !== 'admin' || credentials.pass !== UPLOAD_PASSWORD) {
-    res.set('WWW-Authenticate', 'Basic realm="Upload"');
-    return res.status(401).send('Authentication required');
-  }
-  next();
-}
 
 function detectFileType(content) {
   const lines = content.split('\n').slice(0, 10).join('\n');
@@ -361,11 +341,11 @@ function logUpload(filename, company, fileType, rowsAdded, rowsSkipped) {
 
 // --- Routes ---
 
-app.get('/upload', requireAuthPage, (req, res) => {
+app.get('/upload', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'upload.html'));
 });
 
-app.post('/api/upload', uploadLimiter, requireAuth, upload.single('file'), (req, res) => {
+app.post('/api/upload', uploadLimiter, upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -553,7 +533,7 @@ app.get('/api/upload-history', (req, res) => {
   res.json({ history, lastUpdated });
 });
 
-app.delete('/api/data', requireAuth, (req, res) => {
+app.delete('/api/data', (req, res) => {
   const { company, table, confirm } = req.query;
 
   if (confirm !== 'yes') {

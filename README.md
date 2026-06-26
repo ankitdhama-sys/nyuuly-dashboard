@@ -21,7 +21,6 @@ npm install
 ### 2. Set environment variables (optional)
 
 ```bash
-export UPLOAD_PASSWORD=yourpassword
 export DATABASE_PATH=./database/analytics.db
 export PORT=3000
 ```
@@ -37,9 +36,7 @@ npm run dev
 ### 4. Open the app
 
 - **Dashboard:** http://localhost:3000/
-- **Upload page:** http://localhost:3000/upload (requires password)
-
-Default upload credentials: username `admin`, password `changeme` (or your `UPLOAD_PASSWORD` env var).
+- **Upload page:** http://localhost:3000/upload
 
 ## Weekly Upload Workflow
 
@@ -80,27 +77,26 @@ git push -u origin main
 | Variable | Value |
 |---|---|
 | `DATABASE_PATH` | `/data/analytics.db` |
-| `UPLOAD_PASSWORD` | Your secure password |
 | `PORT` | (Railway sets this automatically) |
 
 ### 5. Deploy
 
 Railway runs `node server.js` automatically. Visit your deployed URL:
 - `/` — public dashboard
-- `/upload` — password-protected upload page
+- `/upload` — CSV upload page
 
 ## API Routes
 
 | Method | Route | Description |
 |---|---|---|
-| POST | `/api/upload` | Upload CSV (auth required) |
+| POST | `/api/upload` | Upload CSV |
 | GET | `/api/social` | Social media data |
 | GET | `/api/funnel` | Funnel data |
 | GET | `/api/traffic` | Traffic acquisition data |
 | GET | `/api/pages` | Pages & screens data |
 | GET | `/api/summary` | KPI summary |
 | GET | `/api/upload-history` | Recent uploads |
-| DELETE | `/api/data` | Clear data (auth required) |
+| DELETE | `/api/data` | Clear data |
 
 ## Project Structure
 
