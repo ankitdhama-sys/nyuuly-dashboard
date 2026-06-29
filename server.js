@@ -23,7 +23,13 @@ const {
   buildApplicationFunnel,
   buildGa4FunnelSteps,
   getLandingPages,
+  isJobDetailPage,
 } = require('./journey-config');
+const {
+  VISA_TYPES,
+  BARRIER_TYPES,
+  getDashboardGuide,
+} = require('./dashboard-structure');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,7 +52,7 @@ const uploadLimiter = rateLimit({
   message: { error: 'Too many uploads. Max 40 per hour.' },
 });
 
-const MANUAL_FILE_TYPES = ['platform', 'applicants'];
+const MANUAL_FILE_TYPES = ['platform', 'applicants', 'geo', 'visa', 'nationality', 'barriers'];
 
 const MONTH_NAME_TO_NUM = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
@@ -593,20 +599,127 @@ function getManualDataStatus(company) {
     FROM applicant_stats WHERE company = ?
   `).get(company);
 
+  const geoRows = db.prepare(`
+    SELECT COUNT(*) as count, MAX(month_label) as latestMonth, MAX(upload_date) as lastUpdated
+    FROM audience_geo_stats WHERE company = ?
+  `).get(company);
+
+  const visaRows = db.prepare(`
+    SELECT COUNT(*) as count, MAX(month_label) as latestMonth, MAX(upload_date) as lastUpdated
+    FROM visa_stats WHERE company = ?
+  `).get(company);
+
+  const nationalityRows = db.prepare(`
+    SELECT COUNT(*) as count, MAX(month_label) as latestMonth, MAX(upload_date) as lastUpdated
+    FROM nationality_stats WHERE company = ?
+  `).get(company);
+
+  const barrierRows = db.prepare(`
+    SELECT COUNT(*) as count, MAX(month_label) as latestMonth, MAX(upload_date) as lastUpdated
+    FROM barrier_stats WHERE company = ?
+  `).get(company);
+
+  const statusBlock = (rows) => ({
+    uploaded: rows.count > 0,
+    rowsAdded: rows.count,
+    latestMonth: rows.latestMonth,
+    uploadedAt: rows.lastUpdated,
+  });
+
   return {
-    platform: {
-      uploaded: platformRows.count > 0,
-      rowsAdded: platformRows.count,
-      latestMonth: platformRows.latestMonth,
-      uploadedAt: platformRows.lastUpdated,
-    },
-    applicants: {
-      uploaded: applicantRows.count > 0,
-      rowsAdded: applicantRows.count,
-      latestMonth: applicantRows.latestMonth,
-      uploadedAt: applicantRows.lastUpdated,
-    },
+    platform: statusBlock(platformRows),
+    applicants: statusBlock(applicantRows),
+    geo: statusBlock(geoRows),
+    visa: statusBlock(visaRows),
+    nationality: statusBlock(nationalityRows),
+    barriers: statusBlock(barrierRows),
   };
+}
+
+function saveGeoRow(company, parsedMonth, data) {
+  db.prepare(`
+    INSERT OR REPLACE INTO audience_geo_stats
+    (company, month_label, year, month, in_japan_visitors, out_japan_visitors,
+     in_japan_registrations, out_japan_registrations)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    company,
+    parsedMonth.month_label,
+    parsedMonth.year,
+    parsedMonth.month,
+    parseNum(data.in_japan_visitors),
+    parseNum(data.out_japan_visitors),
+    parseNum(data.in_japan_registrations),
+    parseNum(data.out_japan_registrations)
+  );
+}
+
+function saveVisaRow(company, parsedMonth, visaType, data) {
+  db.prepare(`
+    INSERT OR REPLACE INTO visa_stats
+    (company, month_label, year, month, visa_type, registrations, abandonments, applications)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    company,
+    parsedMonth.month_label,
+    parsedMonth.year,
+    parsedMonth.month,
+    visaType,
+    parseNum(data.registrations),
+    parseNum(data.abandonments),
+    parseNum(data.applications)
+  );
+}
+
+function saveNationalityRow(company, parsedMonth, nationality, visitors, registrations) {
+  db.prepare(`
+    INSERT OR REPLACE INTO nationality_stats
+    (company, month_label, year, month, nationality, visitors, registrations)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    company,
+    parsedMonth.month_label,
+    parsedMonth.year,
+    parsedMonth.month,
+    String(nationality || '').trim(),
+    parseNum(visitors),
+    parseNum(registrations)
+  );
+}
+
+function saveBarrierRow(company, parsedMonth, barrierName, usersReached, usersDropped) {
+  db.prepare(`
+    INSERT OR REPLACE INTO barrier_stats
+    (company, month_label, year, month, barrier_name, users_reached, users_dropped)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    company,
+    parsedMonth.month_label,
+    parsedMonth.year,
+    parsedMonth.month,
+    barrierName,
+    parseNum(usersReached),
+    parseNum(usersDropped)
+  );
+}
+
+function monthSortKey(row) {
+  return (row.year || 0) * 12 + (row.month || 0);
+}
+
+function computeSixMonthAvg(rows, valueFn, excludeLatest = true) {
+  if (!rows.length) return null;
+  const sorted = [...rows].sort((a, b) => monthSortKey(a) - monthSortKey(b));
+  const pool = excludeLatest && sorted.length > 1 ? sorted.slice(0, -1) : sorted;
+  const window = pool.slice(-6);
+  if (!window.length) return null;
+  const sum = window.reduce((s, r) => s + valueFn(r), 0);
+  return Math.round((sum / window.length) * 10) / 10;
+}
+
+function pctChange(current, average) {
+  if (average == null || average === 0) return null;
+  return Math.round(((current - average) / average) * 1000) / 10;
 }
 
 // --- Routes ---
@@ -759,6 +872,19 @@ app.get('/api/social', (req, res) => {
     ORDER BY count DESC
   `).all(...params);
 
+  const byAccount = db.prepare(`
+    SELECT
+      COALESCE(NULLIF(account_name, ''), NULLIF(account_username, ''), 'Unknown') as account,
+      account_username,
+      COUNT(*) as posts,
+      COALESCE(SUM(views), 0) as views,
+      COALESCE(SUM(reach), 0) as reach,
+      COALESCE(SUM(likes + comments + shares + saves), 0) as engagement
+    FROM social_posts ${clause}
+    GROUP BY account_username, account_name
+    ORDER BY views DESC
+  `).all(...params);
+
   const allPosts = db.prepare(`
     SELECT *, (likes + comments + shares + saves) as engagement,
       CASE WHEN reach > 0 THEN ROUND(CAST(likes + comments + shares + saves AS REAL) / reach * 100, 2) ELSE 0 END as engagement_rate
@@ -766,7 +892,7 @@ app.get('/api/social', (req, res) => {
     ORDER BY views DESC
   `).all(...params);
 
-  res.json({ kpis, timeSeries, topPosts, postTypes, posts: allPosts, filter: { company, start, end } });
+  res.json({ kpis, timeSeries, topPosts, postTypes, byAccount, posts: allPosts, filter: { company, start, end } });
 });
 
 app.get('/api/funnel', (req, res) => {
@@ -919,6 +1045,245 @@ app.get('/api/applicant-stats', (req, res) => {
   });
 });
 
+app.get('/api/dashboard-guide', (req, res) => {
+  const company = resolveCompany(req.query.company || 'workjapan');
+  res.json(getDashboardGuide(company));
+});
+
+app.get('/api/intelligence', (req, res) => {
+  const { company, start, end } = req.query;
+  if (company !== 'workjapan') {
+    return res.json({
+      geo: { rows: [], latest: null },
+      visa: { rows: [], byType: [], latestMonth: null },
+      nationality: { rows: [], top: [] },
+      barriers: { rows: [], latest: null },
+      topJobs: [],
+      filter: { company, start, end },
+    });
+  }
+
+  const { clause, params } = buildMonthlyStatsQuery(company, start, end);
+
+  const geoRows = db.prepare(`
+    SELECT * FROM audience_geo_stats ${clause} ORDER BY year, month
+  `).all(...params);
+
+  const visaRows = db.prepare(`
+    SELECT * FROM visa_stats ${clause} ORDER BY year, month, visa_type
+  `).all(...params);
+
+  const nationalityRows = db.prepare(`
+    SELECT * FROM nationality_stats ${clause} ORDER BY year, month, visitors DESC
+  `).all(...params);
+
+  const barrierRows = db.prepare(`
+    SELECT * FROM barrier_stats ${clause} ORDER BY year, month
+  `).all(...params);
+
+  const latestGeo = geoRows.length ? geoRows[geoRows.length - 1] : null;
+  const latestBarrier = barrierRows.length ? barrierRows[barrierRows.length - 1] : null;
+
+  const visaMonths = [...new Set(visaRows.map((r) => r.month_label))].sort(
+    (a, b) => monthSortKey(visaRows.find((r) => r.month_label === a))
+      - monthSortKey(visaRows.find((r) => r.month_label === b))
+  );
+  const latestVisaMonth = visaMonths.length ? visaMonths[visaMonths.length - 1] : null;
+  const latestVisaRows = latestVisaMonth
+    ? visaRows.filter((r) => r.month_label === latestVisaMonth)
+    : [];
+
+  const visaByType = VISA_TYPES.map((visaType) => {
+    const typeRows = visaRows.filter((r) => r.visa_type === visaType);
+    const latest = latestVisaRows.find((r) => r.visa_type === visaType);
+    const avgAbandon = computeSixMonthAvg(typeRows, (r) => {
+      const total = (r.registrations || 0) + (r.abandonments || 0);
+      return total > 0 ? (r.abandonments / total) * 100 : 0;
+    });
+    const latestAbandon = latest
+      ? ((latest.abandonments || 0) / Math.max(1, (latest.registrations || 0) + (latest.abandonments || 0))) * 100
+      : null;
+    return {
+      visa_type: visaType,
+      latest,
+      abandonmentRate: latestAbandon != null ? Math.round(latestAbandon * 10) / 10 : null,
+      avgAbandonmentRate6mo: avgAbandon,
+      vsAvgPct: pctChange(latestAbandon, avgAbandon),
+      rows: typeRows,
+    };
+  });
+
+  const nationalityByMonth = {};
+  for (const row of nationalityRows) {
+    if (!nationalityByMonth[row.month_label]) nationalityByMonth[row.month_label] = [];
+    nationalityByMonth[row.month_label].push(row);
+  }
+  const nationalityMonths = Object.keys(nationalityByMonth).sort(
+    (a, b) => monthSortKey(nationalityRows.find((r) => r.month_label === a))
+      - monthSortKey(nationalityRows.find((r) => r.month_label === b))
+  );
+  const latestNatMonth = nationalityMonths.length ? nationalityMonths[nationalityMonths.length - 1] : null;
+  const topNationalities = latestNatMonth
+    ? [...nationalityByMonth[latestNatMonth]]
+      .sort((a, b) => b.visitors - a.visitors)
+      .slice(0, 10)
+      .map((n) => {
+        const natRows = nationalityRows.filter((r) => r.nationality === n.nationality);
+        const avgVisitors = computeSixMonthAvg(natRows, (r) => r.visitors || 0);
+        return {
+          ...n,
+          avgVisitors6mo: avgVisitors,
+          vsAvgPct: pctChange(n.visitors, avgVisitors),
+        };
+      })
+    : [];
+
+  const ga4Q = buildGa4DateQuery(company, start, end);
+  const rawPages = db.prepare(`
+    SELECT * FROM pages_screens ${ga4Q.clause} ORDER BY views DESC
+  `).all(...ga4Q.params);
+  const pages = start && end ? proratePagesRows(rawPages, start, end) : rawPages;
+  const topJobs = pages
+    .filter((p) => isJobDetailPage(p.page_path))
+    .slice(0, 15)
+    .map((p) => ({
+      path: p.page_path,
+      views: p.views,
+      users: p.active_users,
+      avgTime: p.avg_engagement_time,
+    }));
+
+  const geoComparisons = latestGeo ? {
+    inJapanVisitors: {
+      current: latestGeo.in_japan_visitors,
+      avg6mo: computeSixMonthAvg(geoRows, (r) => r.in_japan_visitors || 0),
+      vsAvgPct: pctChange(latestGeo.in_japan_visitors, computeSixMonthAvg(geoRows, (r) => r.in_japan_visitors || 0)),
+    },
+    outJapanVisitors: {
+      current: latestGeo.out_japan_visitors,
+      avg6mo: computeSixMonthAvg(geoRows, (r) => r.out_japan_visitors || 0),
+      vsAvgPct: pctChange(latestGeo.out_japan_visitors, computeSixMonthAvg(geoRows, (r) => r.out_japan_visitors || 0)),
+    },
+  } : null;
+
+  res.json({
+    geo: { rows: geoRows, latest: latestGeo, comparisons: geoComparisons },
+    visa: { rows: visaRows, byType: visaByType, latestMonth: latestVisaMonth },
+    nationality: { rows: nationalityRows, top: topNationalities, latestMonth: latestNatMonth },
+    barriers: {
+      rows: barrierRows,
+      latest: latestBarrier,
+      dropOffRate: latestBarrier && latestBarrier.users_reached > 0
+        ? Math.round((latestBarrier.users_dropped / latestBarrier.users_reached) * 1000) / 10
+        : null,
+    },
+    topJobs,
+    filter: { company, start, end },
+  });
+});
+
+app.post('/api/manual/geo', uploadLimiter, (req, res) => {
+  try {
+    const { company, month, in_japan_visitors, out_japan_visitors,
+      in_japan_registrations, out_japan_registrations } = req.body;
+    if (company !== 'workjapan') {
+      return res.status(400).json({ error: 'Geography data is only available for WORK JAPAN' });
+    }
+    const parsedMonth = parseMonthLabel(month);
+    if (!parsedMonth) return res.status(400).json({ error: 'Invalid month format' });
+
+    saveGeoRow(company, parsedMonth, {
+      in_japan_visitors, out_japan_visitors,
+      in_japan_registrations, out_japan_registrations,
+    });
+    logUpload(`Manual entry — ${parsedMonth.month_label}`, company, 'geo', 1, 0);
+    res.json({ success: true, rowsAdded: 1, month: parsedMonth.month_label, company });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/manual/visa', uploadLimiter, (req, res) => {
+  try {
+    const { company, month, visas } = req.body;
+    if (company !== 'workjapan') {
+      return res.status(400).json({ error: 'Visa data is only available for WORK JAPAN' });
+    }
+    const parsedMonth = parseMonthLabel(month);
+    if (!parsedMonth) return res.status(400).json({ error: 'Invalid month format' });
+    if (!Array.isArray(visas) || !visas.length) {
+      return res.status(400).json({ error: 'At least one visa row is required' });
+    }
+
+    let saved = 0;
+    for (const row of visas) {
+      if (!row.visa_type) continue;
+      saveVisaRow(company, parsedMonth, row.visa_type, row);
+      saved++;
+    }
+    if (!saved) return res.status(400).json({ error: 'No valid visa rows to save' });
+
+    logUpload(`Manual entry — ${parsedMonth.month_label}`, company, 'visa', saved, 0);
+    res.json({ success: true, rowsAdded: saved, month: parsedMonth.month_label, company });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/manual/nationality', uploadLimiter, (req, res) => {
+  try {
+    const { company, month, nationalities } = req.body;
+    if (company !== 'workjapan') {
+      return res.status(400).json({ error: 'Nationality data is only available for WORK JAPAN' });
+    }
+    const parsedMonth = parseMonthLabel(month);
+    if (!parsedMonth) return res.status(400).json({ error: 'Invalid month format' });
+    if (!Array.isArray(nationalities) || !nationalities.length) {
+      return res.status(400).json({ error: 'At least one nationality row is required' });
+    }
+
+    let saved = 0;
+    for (const row of nationalities) {
+      if (!row.nationality) continue;
+      saveNationalityRow(company, parsedMonth, row.nationality, row.visitors, row.registrations);
+      saved++;
+    }
+    if (!saved) return res.status(400).json({ error: 'No valid nationality rows to save' });
+
+    logUpload(`Manual entry — ${parsedMonth.month_label}`, company, 'nationality', saved, 0);
+    res.json({ success: true, rowsAdded: saved, month: parsedMonth.month_label, company });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/manual/barriers', uploadLimiter, (req, res) => {
+  try {
+    const { company, month, barriers } = req.body;
+    if (company !== 'workjapan') {
+      return res.status(400).json({ error: 'Barrier data is only available for WORK JAPAN' });
+    }
+    const parsedMonth = parseMonthLabel(month);
+    if (!parsedMonth) return res.status(400).json({ error: 'Invalid month format' });
+    if (!Array.isArray(barriers) || !barriers.length) {
+      return res.status(400).json({ error: 'At least one barrier row is required' });
+    }
+
+    let saved = 0;
+    for (const row of barriers) {
+      if (!row.barrier_name) continue;
+      saveBarrierRow(company, parsedMonth, row.barrier_name, row.users_reached, row.users_dropped);
+      saved++;
+    }
+    if (!saved) return res.status(400).json({ error: 'No valid barrier rows to save' });
+
+    logUpload(`Manual entry — ${parsedMonth.month_label}`, company, 'barriers', saved, 0);
+    res.json({ success: true, rowsAdded: saved, month: parsedMonth.month_label, company });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/summary', (req, res) => {
   const { company, start, end } = req.query;
   const socialQ = buildSocialQuery(company, start, end);
@@ -1011,6 +1376,10 @@ app.get('/api/upload-status', (req, res) => {
       ...FILE_TYPE_LABELS,
       platform: 'Platform Registrations (Manual)',
       applicants: 'Job Seeker Applications (Manual)',
+      geo: 'Audience Geography (Manual)',
+      visa: 'Visa Intelligence (Manual)',
+      nationality: 'Nationality Trends (Manual)',
+      barriers: 'Conversion Barriers (Manual)',
     },
   });
 });

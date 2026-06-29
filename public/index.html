@@ -22,7 +22,6 @@
       <button class="tab-btn" data-company="nyuuly">Nyuuly</button>
       <button class="tab-btn active" data-company="workjapan">WORK JAPAN</button>
     </div>
-
     <div class="date-group" id="dateGroup">
       <button class="tab-btn" data-range="7">Last 7 Days</button>
       <button class="tab-btn" data-range="30">Last 30 Days</button>
@@ -31,9 +30,7 @@
       <input type="date" id="startDate" style="display:none">
       <input type="date" id="endDate" style="display:none">
     </div>
-
     <div class="filter-label" id="filterLabel">Loading filters…</div>
-
     <div class="data-status" id="dataStatus" title="Weekly CSV upload status">
       <span class="data-status-label">Data files:</span>
       <span id="dataStatusDots">—</span>
@@ -41,84 +38,59 @@
   </div>
 
   <main class="main">
-    <!-- Customer Journeys -->
-    <section class="section journey-section" id="section-journeys">
-      <div class="section-header" data-section="journeys">
-        <h2>Customer Journeys</h2>
+    <section class="section guide-section" id="section-guide">
+      <div class="section-header" data-section="guide">
+        <h2 id="guideTitle">How to read this dashboard</h2>
         <span class="collapse-icon">▼</span>
       </div>
       <div class="section-body">
-        <p class="journey-intro" id="journeyIntro">Customer journeys built from your 4 weekly CSVs — social (awareness), traffic (arrival), pages (navigation), funnel (conversion &amp; drop-off).</p>
-        <div class="journey-tabs" id="journeyTabs"></div>
-        <div id="journeyPanel"></div>
-        <h3 class="subsection-title">Landing Pages &amp; Likely Next Steps</h3>
-        <p class="subsection-hint">From Pages &amp; Screens CSV — where users land and popular paths they visit next.</p>
-        <div class="table-wrap"><table id="landingTable"><thead></thead><tbody></tbody></table></div>
-      </div>
-    </section>
-    <!-- Section: Platform Registrations -->
-    <section class="section" id="section-platform">
-      <div class="section-header" data-section="platform">
-        <h2>Platform Registrations &amp; Active Users</h2>
-        <span class="collapse-icon">▼</span>
-      </div>
-      <div class="section-body">
-        <p class="subsection-hint">WORK JAPAN monthly data — enter registrations and active users on the <a href="/upload">upload page</a>.</p>
-        <div class="kpi-row" id="platformKpis"></div>
-        <div class="chart-grid">
-          <div class="chart-container">
-            <div class="chart-header"><h3>Registrations by Month</h3><button class="chart-download" data-chart="chartRegistrationsByMonth">PNG</button></div>
-            <div class="chart-wrapper"><canvas id="chartRegistrationsByMonth"></canvas></div>
-          </div>
-          <div class="chart-container">
-            <div class="chart-header"><h3>Active Users by Platform</h3><button class="chart-download" data-chart="chartActiveByPlatform">PNG</button></div>
-            <div class="chart-wrapper"><canvas id="chartActiveByPlatform"></canvas></div>
-          </div>
-        </div>
-        <h3 class="subsection-title">Monthly Breakdown</h3>
-        <div class="table-wrap"><table id="platformTable"><thead></thead><tbody></tbody></table></div>
+        <p class="guide-intro" id="guideIntro"></p>
+        <div class="guide-pillars" id="guidePillars"></div>
+        <div class="guide-legend" id="guideLegend"></div>
       </div>
     </section>
 
-    <!-- Section: Job Seeker Applications -->
-    <section class="section" id="section-applicants">
-      <div class="section-header" data-section="applicants">
-        <h2>Job Seeker Applications</h2>
+    <nav class="funnel-nav workjapan-only" id="funnelNav" aria-label="Job seeker funnel stages"></nav>
+
+    <section class="section funnel-overview-section workjapan-only" id="section-funnel-overview">
+      <div class="section-header" data-section="funnel-overview">
+        <h2>Job Seeker Funnel — At a Glance</h2>
         <span class="collapse-icon">▼</span>
       </div>
       <div class="section-body">
-        <p class="subsection-hint">WORK JAPAN monthly recruitment funnel — enter data on the <a href="/upload">upload page</a>.</p>
-        <div class="kpi-row" id="applicantKpis"></div>
-        <div class="chart-grid">
-          <div class="chart-container">
-            <div class="chart-header"><h3>Application Funnel (Latest Month)</h3><button class="chart-download" data-chart="chartApplicantFunnel">PNG</button></div>
-            <div class="chart-wrapper"><canvas id="chartApplicantFunnel"></canvas></div>
-          </div>
-          <div class="chart-container">
-            <div class="chart-header"><h3>Applications by Month</h3><button class="chart-download" data-chart="chartApplicantsByMonth">PNG</button></div>
-            <div class="chart-wrapper"><canvas id="chartApplicantsByMonth"></canvas></div>
-          </div>
-        </div>
-        <h3 class="subsection-title">Monthly Breakdown</h3>
-        <div class="table-wrap"><table id="applicantTable"><thead></thead><tbody></tbody></table></div>
+        <p class="subsection-hint">One view of all five stages. Use the navigator above to jump to details.</p>
+        <div class="funnel-pipeline" id="funnelPipeline"></div>
       </div>
     </section>
 
-    <!-- Section 1: Social Media -->
+    <div class="funnel-stage-banner workjapan-only" id="stage-awareness">
+      <span class="funnel-stage-num">1</span>
+      <div>
+        <h2 class="funnel-stage-title">Awareness</h2>
+        <p class="funnel-stage-question">How do job seekers discover WORK JAPAN?</p>
+      </div>
+    </div>
+
     <section class="section" id="section-social">
       <div class="section-header" data-section="social">
-        <h2>1. Instagram / Social — Job Post Awareness</h2>
+        <h2 class="section-title-wj">Social &amp; Content Performance</h2>
+        <h2 class="section-title-nyuuly">1. Social Media</h2>
         <span class="collapse-icon">▼</span>
       </div>
       <div class="section-body">
+        <p class="subsection-hint workjapan-only">Upload social CSV exports per platform (Instagram, YouTube, Facebook, etc.). Accounts are grouped by account name.</p>
         <div class="kpi-row" id="socialKpis"></div>
         <div class="chart-grid">
           <div class="chart-container full-width">
-            <div class="chart-header"><h3>Views & Reach Over Time</h3><button class="chart-download" data-chart="chartViewsReach">PNG</button></div>
+            <div class="chart-header"><h3>Views &amp; Reach Over Time</h3><button class="chart-download" data-chart="chartViewsReach">PNG</button></div>
             <div class="chart-wrapper"><canvas id="chartViewsReach"></canvas></div>
           </div>
+          <div class="chart-container workjapan-only">
+            <div class="chart-header"><h3>Performance by Social Account</h3><button class="chart-download" data-chart="chartSocialAccounts">PNG</button></div>
+            <div class="chart-wrapper"><canvas id="chartSocialAccounts"></canvas></div>
+          </div>
           <div class="chart-container">
-            <div class="chart-header"><h3>Top 10 Posts — Engagement Breakdown</h3><button class="chart-download" data-chart="chartEngagement">PNG</button></div>
+            <div class="chart-header"><h3>Top 10 Posts — Engagement</h3><button class="chart-download" data-chart="chartEngagement">PNG</button></div>
             <div class="chart-wrapper"><canvas id="chartEngagement"></canvas></div>
           </div>
           <div class="chart-container">
@@ -126,16 +98,27 @@
             <div class="chart-wrapper"><canvas id="chartPostTypes"></canvas></div>
           </div>
         </div>
-        <h3 style="font-size:0.9rem;color:var(--text-muted);margin-bottom:0.5rem">Top Performing Posts</h3>
+        <h4 class="subsection-title workjapan-only">Social Accounts</h4>
+        <div class="table-wrap workjapan-only"><table id="socialAccountsTable"><thead></thead><tbody></tbody></table></div>
+        <h4 class="subsection-title">Top Performing Posts</h4>
         <div class="table-wrap"><table id="socialTable"><thead></thead><tbody></tbody></table></div>
         <div class="pagination" id="socialPagination"></div>
       </div>
     </section>
 
-    <!-- Section 2: Traffic -->
+    <div class="funnel-stage-banner workjapan-only" id="stage-consideration">
+      <span class="funnel-stage-num">2</span>
+      <div>
+        <h2 class="funnel-stage-title">Consideration</h2>
+        <p class="funnel-stage-question">Where do users come from, what do they browse, and where is the biggest drop-off?</p>
+      </div>
+    </div>
+    <div id="considerationDropoffs" class="dropoff-highlight-panel workjapan-only"></div>
+
     <section class="section" id="section-traffic">
       <div class="section-header" data-section="traffic">
-        <h2>2. Traffic — How Users Arrive</h2>
+        <h2 class="section-title-wj">Traffic — Where Users Come From</h2>
+        <h2 class="section-title-nyuuly">2. Traffic — How Users Arrive</h2>
         <span class="collapse-icon">▼</span>
       </div>
       <div class="section-body">
@@ -154,15 +137,15 @@
             <div class="chart-wrapper"><canvas id="chartTrafficEngagement"></canvas></div>
           </div>
         </div>
-        <h3 style="font-size:0.9rem;color:var(--text-muted);margin-bottom:0.5rem">Channel Performance</h3>
+        <h4 class="subsection-title">Channel Performance</h4>
         <div class="table-wrap"><table id="trafficTable"><thead></thead><tbody></tbody></table></div>
       </div>
     </section>
 
-    <!-- Section 3: Pages -->
     <section class="section" id="section-pages">
       <div class="section-header" data-section="pages">
-        <h2>3. Pages — Where Users Navigate</h2>
+        <h2 class="section-title-wj">Pages — Navigation &amp; Job Views</h2>
+        <h2 class="section-title-nyuuly">3. Pages — Where Users Navigate</h2>
         <span class="collapse-icon">▼</span>
       </div>
       <div class="section-body">
@@ -176,16 +159,27 @@
             <div class="chart-wrapper"><canvas id="chartPagesScatter"></canvas></div>
           </div>
         </div>
-        <h3 style="font-size:0.9rem;color:var(--text-muted);margin-bottom:0.5rem">Page Performance</h3>
+        <h4 class="subsection-title workjapan-only">Top Job Pages</h4>
+        <div class="table-wrap workjapan-only"><table id="topJobsTable"><thead></thead><tbody></tbody></table></div>
+        <h4 class="subsection-title">Page Performance</h4>
         <div class="table-wrap"><table id="pagesTable"><thead></thead><tbody></tbody></table></div>
         <div class="pagination" id="pagesPagination"></div>
       </div>
     </section>
 
-    <!-- Section 4: Funnel -->
+    <div class="funnel-stage-banner workjapan-only" id="stage-commit">
+      <span class="funnel-stage-num">3</span>
+      <div>
+        <h2 class="funnel-stage-title">Commit (CV / Register)</h2>
+        <p class="funnel-stage-question">Who registers — and who abandons because of barriers like the Japanese phone number?</p>
+      </div>
+    </div>
+    <div id="commitBarriers" class="barrier-highlight-panel workjapan-only"></div>
+
     <section class="section" id="section-funnel">
       <div class="section-header" data-section="funnel">
-        <h2>4. Funnel — Conversion &amp; Drop-off</h2>
+        <h2 class="section-title-wj">GA4 Funnel — Session Quality &amp; Drop-offs</h2>
+        <h2 class="section-title-nyuuly">4. Funnel — Conversion &amp; Drop-off</h2>
         <span class="collapse-icon">▼</span>
       </div>
       <div class="section-body">
@@ -199,8 +193,134 @@
             <div class="chart-wrapper"><canvas id="chartFunnelDevice"></canvas></div>
           </div>
         </div>
-        <h3 style="font-size:0.9rem;color:var(--text-muted);margin-bottom:0.5rem">Funnel Details</h3>
+        <h4 class="subsection-title">Funnel Details</h4>
         <div class="table-wrap"><table id="funnelTable"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="section workjapan-only" id="section-platform">
+      <div class="section-header" data-section="platform">
+        <h2>Platform Registrations &amp; Active Users</h2>
+        <span class="collapse-icon">▼</span>
+      </div>
+      <div class="section-body">
+        <p class="subsection-hint">Monthly app registrations — <a href="/upload">upload page</a>.</p>
+        <div class="kpi-row" id="platformKpis"></div>
+        <div class="chart-grid">
+          <div class="chart-container">
+            <div class="chart-header"><h3>Registrations by Month</h3><button class="chart-download" data-chart="chartRegistrationsByMonth">PNG</button></div>
+            <div class="chart-wrapper"><canvas id="chartRegistrationsByMonth"></canvas></div>
+          </div>
+          <div class="chart-container">
+            <div class="chart-header"><h3>Active Users by Platform</h3><button class="chart-download" data-chart="chartActiveByPlatform">PNG</button></div>
+            <div class="chart-wrapper"><canvas id="chartActiveByPlatform"></canvas></div>
+          </div>
+        </div>
+        <h4 class="subsection-title">Monthly Breakdown</h4>
+        <div class="table-wrap"><table id="platformTable"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </section>
+
+    <div class="funnel-stage-banner workjapan-only" id="stage-proceed">
+      <span class="funnel-stage-num">4</span>
+      <div>
+        <h2 class="funnel-stage-title">Proceed (Apply)</h2>
+        <p class="funnel-stage-question">How many users move from browsing to actually applying?</p>
+      </div>
+    </div>
+
+    <section class="section workjapan-only" id="section-applicants-proceed">
+      <div class="section-header" data-section="applicants-proceed">
+        <h2>Application Funnel &amp; Volume</h2>
+        <span class="collapse-icon">▼</span>
+      </div>
+      <div class="section-body">
+        <div id="proceedWebFunnel"></div>
+        <div class="kpi-row" id="applicantProceedKpis"></div>
+        <div class="chart-grid">
+          <div class="chart-container">
+            <div class="chart-header"><h3>Application Funnel (Latest Month)</h3><button class="chart-download" data-chart="chartApplicantFunnel">PNG</button></div>
+            <div class="chart-wrapper"><canvas id="chartApplicantFunnel"></canvas></div>
+          </div>
+          <div class="chart-container">
+            <div class="chart-header"><h3>Applications by Month</h3><button class="chart-download" data-chart="chartApplicantsByMonth">PNG</button></div>
+            <div class="chart-wrapper"><canvas id="chartApplicantsByMonth"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="funnel-stage-banner workjapan-only" id="stage-result">
+      <span class="funnel-stage-num">5</span>
+      <div>
+        <h2 class="funnel-stage-title">Result</h2>
+        <p class="funnel-stage-question">What outcomes do applicants achieve?</p>
+      </div>
+    </div>
+
+    <section class="section workjapan-only" id="section-applicants-result">
+      <div class="section-header" data-section="applicants-result">
+        <h2>Recruitment Outcomes</h2>
+        <span class="collapse-icon">▼</span>
+      </div>
+      <div class="section-body">
+        <div class="kpi-row" id="applicantResultKpis"></div>
+        <h4 class="subsection-title">Monthly Breakdown</h4>
+        <div class="table-wrap"><table id="applicantTable"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </section>
+
+    <div class="funnel-pillar workjapan-only" id="pillar-employer">
+      <div class="funnel-pillar-header">
+        <h2>Employer Intelligence</h2>
+        <p class="funnel-pillar-note">Separate from job seekers — employers follow a different journey.</p>
+      </div>
+      <section class="section" id="section-employer">
+        <div class="section-header" data-section="employer">
+          <h3>Employer Web Journey</h3>
+          <span class="collapse-icon">▼</span>
+        </div>
+        <div class="section-body"><div id="employerPanel"></div></div>
+      </section>
+    </div>
+
+    <div class="funnel-pillar workjapan-only" id="pillar-intelligence">
+      <div class="funnel-pillar-header">
+        <h2>Customer Intelligence</h2>
+        <p class="funnel-pillar-note">Nationality, visa, geography, barriers — vs 6-month average. <a href="/upload">Enter monthly data</a>.</p>
+      </div>
+      <section class="section" id="section-intelligence">
+        <div class="section-header" data-section="intelligence">
+          <h3>User Metadata &amp; Trends</h3>
+          <span class="collapse-icon">▼</span>
+        </div>
+        <div class="section-body">
+          <div id="intelligencePanel"></div>
+          <div class="chart-grid">
+            <div class="chart-container">
+              <div class="chart-header"><h3>Visa Abandonment by Type</h3><button class="chart-download" data-chart="chartVisaAbandon">PNG</button></div>
+              <div class="chart-wrapper"><canvas id="chartVisaAbandon"></canvas></div>
+            </div>
+            <div class="chart-container">
+              <div class="chart-header"><h3>Top Nationalities (Visitors)</h3><button class="chart-download" data-chart="chartNationality">PNG</button></div>
+              <div class="chart-wrapper"><canvas id="chartNationality"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="section journey-section" id="section-journeys">
+      <div class="section-header" data-section="journeys">
+        <h2 id="journeysSectionTitle">Customer Journey Deep Dive</h2>
+        <span class="collapse-icon">▼</span>
+      </div>
+      <div class="section-body">
+        <p class="journey-intro" id="journeyIntro"></p>
+        <div class="journey-tabs" id="journeyTabs"></div>
+        <div id="journeyPanel"></div>
+        <h3 class="subsection-title">Landing Pages &amp; Likely Next Steps</h3>
+        <div class="table-wrap"><table id="landingTable"><thead></thead><tbody></tbody></table></div>
       </div>
     </section>
   </main>

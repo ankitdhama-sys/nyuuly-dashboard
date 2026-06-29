@@ -130,6 +130,98 @@
           <button type="submit" class="btn-primary btn-slot" id="applicantsSaveBtn">Save Applicant Data</button>
         </form>
       </div>
+
+      <h3 class="manual-subsection-title">Customer Intelligence (monthly)</h3>
+      <p class="manual-subsection-hint">Nationality, visa type, geography, and conversion barriers — powers the Customer Intelligence section on the dashboard.</p>
+
+      <div class="upload-slot entry-slot" id="manualGeoSlot">
+        <div class="upload-slot-header">
+          <h3>Audience Geography</h3>
+          <span class="slot-badge slot-badge-pending" id="geoBadge">No data</span>
+        </div>
+        <form class="entry-form" id="geoEntryForm">
+          <div class="entry-form-row">
+            <label for="geoMonth">Month</label>
+            <input type="month" id="geoMonth" required>
+          </div>
+          <div class="entry-grid">
+            <div class="entry-field"><label for="inJapanVisitors">In Japan — Visitors</label><input type="number" id="inJapanVisitors" min="0" placeholder="0"></div>
+            <div class="entry-field"><label for="outJapanVisitors">Outside Japan — Visitors</label><input type="number" id="outJapanVisitors" min="0" placeholder="0"></div>
+            <div class="entry-field"><label for="inJapanRegistrations">In Japan — Registrations</label><input type="number" id="inJapanRegistrations" min="0" placeholder="0"></div>
+            <div class="entry-field"><label for="outJapanRegistrations">Outside Japan — Registrations</label><input type="number" id="outJapanRegistrations" min="0" placeholder="0"></div>
+          </div>
+          <button type="submit" class="btn-primary btn-slot">Save Geography</button>
+        </form>
+      </div>
+
+      <div class="upload-slot entry-slot" id="manualVisaSlot">
+        <div class="upload-slot-header">
+          <h3>Visa Type Intelligence</h3>
+          <span class="slot-badge slot-badge-pending" id="visaBadge">No data</span>
+        </div>
+        <form class="entry-form" id="visaEntryForm">
+          <div class="entry-form-row">
+            <label for="visaMonth">Month</label>
+            <input type="month" id="visaMonth" required>
+          </div>
+          <div class="entry-table-wrap">
+            <table class="entry-table">
+              <thead><tr><th>Visa Type</th><th>Registrations</th><th>Abandonments</th><th>Applications</th></tr></thead>
+              <tbody>
+                <tr><td>Spouse Visa</td><td><input type="number" id="visaSpouseReg" min="0"></td><td><input type="number" id="visaSpouseAbandon" min="0"></td><td><input type="number" id="visaSpouseApp" min="0"></td></tr>
+                <tr><td>Gijinkoku</td><td><input type="number" id="visaGijinReg" min="0"></td><td><input type="number" id="visaGijinAbandon" min="0"></td><td><input type="number" id="visaGijinApp" min="0"></td></tr>
+                <tr><td>Tokuteigino</td><td><input type="number" id="visaTokuteiReg" min="0"></td><td><input type="number" id="visaTokuteiAbandon" min="0"></td><td><input type="number" id="visaTokuteiApp" min="0"></td></tr>
+                <tr><td>Other</td><td><input type="number" id="visaOtherReg" min="0"></td><td><input type="number" id="visaOtherAbandon" min="0"></td><td><input type="number" id="visaOtherApp" min="0"></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <button type="submit" class="btn-primary btn-slot">Save Visa Data</button>
+        </form>
+      </div>
+
+      <div class="upload-slot entry-slot" id="manualNationalitySlot">
+        <div class="upload-slot-header">
+          <h3>Nationality Trends</h3>
+          <span class="slot-badge slot-badge-pending" id="nationalityBadge">No data</span>
+        </div>
+        <form class="entry-form" id="nationalityEntryForm">
+          <div class="entry-form-row">
+            <label for="nationalityMonth">Month</label>
+            <input type="month" id="nationalityMonth" required>
+          </div>
+          <div class="entry-table-wrap">
+            <table class="entry-table" id="nationalityTable">
+              <thead><tr><th>Nationality</th><th>Visitors</th><th>Registrations</th><th></th></tr></thead>
+              <tbody id="nationalityRows">
+                <tr class="nationality-row"><td><input type="text" placeholder="e.g. Vietnam"></td><td><input type="number" min="0"></td><td><input type="number" min="0"></td><td></td></tr>
+                <tr class="nationality-row"><td><input type="text" placeholder="e.g. Nepal"></td><td><input type="number" min="0"></td><td><input type="number" min="0"></td><td></td></tr>
+                <tr class="nationality-row"><td><input type="text" placeholder="e.g. Philippines"></td><td><input type="number" min="0"></td><td><input type="number" min="0"></td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <button type="button" class="btn-secondary btn-slot" id="addNationalityRow">+ Add nationality</button>
+          <button type="submit" class="btn-primary btn-slot">Save Nationalities</button>
+        </form>
+      </div>
+
+      <div class="upload-slot entry-slot" id="manualBarriersSlot">
+        <div class="upload-slot-header">
+          <h3>Conversion Barriers</h3>
+          <span class="slot-badge slot-badge-pending" id="barriersBadge">No data</span>
+        </div>
+        <form class="entry-form" id="barriersEntryForm">
+          <div class="entry-form-row">
+            <label for="barriersMonth">Month</label>
+            <input type="month" id="barriersMonth" required>
+          </div>
+          <p class="slot-meta slot-meta-muted">Track drop-off at the CV step — e.g. users who cannot proceed because a Japanese phone number is required.</p>
+          <div class="entry-grid">
+            <div class="entry-field"><label for="phoneReached">Reached CV / phone step</label><input type="number" id="phoneReached" min="0" placeholder="0"></div>
+            <div class="entry-field"><label for="phoneDropped">Dropped at this step</label><input type="number" id="phoneDropped" min="0" placeholder="0"></div>
+          </div>
+          <button type="submit" class="btn-primary btn-slot">Save Barriers</button>
+        </form>
+      </div>
     </div>
 
     <div class="section">
@@ -165,7 +257,7 @@
       {
         type: 'social',
         title: '1. Social Media Posts',
-        hint: 'Instagram / Meta Business Suite export with Post ID, Views, Reach, etc.',
+        hint: 'Meta / social exports per account (Instagram, YouTube, Facebook, etc.) — Post ID, Views, Reach.',
         accept: '.csv',
       },
       {
@@ -279,8 +371,10 @@
 
     function initMonthInputs() {
       const val = defaultMonthValue();
-      document.getElementById('platformMonth').value = val;
-      document.getElementById('applicantMonth').value = val;
+      ['platformMonth', 'applicantMonth', 'geoMonth', 'visaMonth', 'nationalityMonth', 'barriersMonth'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+      });
     }
 
     function updateManualSectionVisibility() {
@@ -293,20 +387,24 @@
       const configs = [
         { type: 'platform', badgeId: 'platformBadge', metaId: 'platformMeta', slotId: 'manualPlatformSlot', label: 'platform rows' },
         { type: 'applicants', badgeId: 'applicantsBadge', metaId: 'applicantsMeta', slotId: 'manualApplicantsSlot', label: 'months' },
+        { type: 'geo', badgeId: 'geoBadge', metaId: null, slotId: 'manualGeoSlot', label: 'months' },
+        { type: 'visa', badgeId: 'visaBadge', metaId: null, slotId: 'manualVisaSlot', label: 'visa rows' },
+        { type: 'nationality', badgeId: 'nationalityBadge', metaId: null, slotId: 'manualNationalitySlot', label: 'nationality rows' },
+        { type: 'barriers', badgeId: 'barriersBadge', metaId: null, slotId: 'manualBarriersSlot', label: 'barrier rows' },
       ];
 
       for (const cfg of configs) {
         const info = status?.manualFiles?.[cfg.type] || { uploaded: false };
         const badge = document.getElementById(cfg.badgeId);
-        const meta = document.getElementById(cfg.metaId);
+        const meta = cfg.metaId ? document.getElementById(cfg.metaId) : null;
         const slot = document.getElementById(cfg.slotId);
-        if (!badge || !meta) continue;
+        if (!badge) continue;
 
         badge.className = `slot-badge ${info.uploaded ? 'slot-badge-done' : 'slot-badge-pending'}`;
         badge.textContent = info.uploaded ? 'Saved' : 'No data';
         slot?.classList.toggle('upload-slot-done', info.uploaded);
 
-        if (info.uploaded) {
+        if (meta && info.uploaded) {
           meta.textContent = `${info.rowsAdded} ${cfg.label} saved${info.latestMonth ? ` · latest: ${info.latestMonth}` : ''}${info.uploadedAt ? ` · updated ${info.uploadedAt}` : ''}`;
         }
       }
@@ -517,6 +615,95 @@
       }
     }
 
+    async function postManual(url, body) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company: companySelect.value, ...body }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      return data;
+    }
+
+    async function handleGeoEntry(e) {
+      e.preventDefault();
+      try {
+        const data = await postManual('/api/manual/geo', {
+          month: document.getElementById('geoMonth').value,
+          in_japan_visitors: document.getElementById('inJapanVisitors').value,
+          out_japan_visitors: document.getElementById('outJapanVisitors').value,
+          in_japan_registrations: document.getElementById('inJapanRegistrations').value,
+          out_japan_registrations: document.getElementById('outJapanRegistrations').value,
+        });
+        showToast(`Geography saved for ${data.month}`);
+        await loadStatus();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function handleVisaEntry(e) {
+      e.preventDefault();
+      const visas = [
+        { visa_type: 'Spouse Visa', registrations: document.getElementById('visaSpouseReg').value, abandonments: document.getElementById('visaSpouseAbandon').value, applications: document.getElementById('visaSpouseApp').value },
+        { visa_type: 'Gijinkoku', registrations: document.getElementById('visaGijinReg').value, abandonments: document.getElementById('visaGijinAbandon').value, applications: document.getElementById('visaGijinApp').value },
+        { visa_type: 'Tokuteigino', registrations: document.getElementById('visaTokuteiReg').value, abandonments: document.getElementById('visaTokuteiAbandon').value, applications: document.getElementById('visaTokuteiApp').value },
+        { visa_type: 'Other', registrations: document.getElementById('visaOtherReg').value, abandonments: document.getElementById('visaOtherAbandon').value, applications: document.getElementById('visaOtherApp').value },
+      ].filter((v) => v.registrations || v.abandonments || v.applications);
+      try {
+        const data = await postManual('/api/manual/visa', { month: document.getElementById('visaMonth').value, visas });
+        showToast(`Visa data saved (${data.rowsAdded} rows)`);
+        await loadStatus();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function handleNationalityEntry(e) {
+      e.preventDefault();
+      const nationalities = [...document.querySelectorAll('#nationalityRows .nationality-row')].map((row) => {
+        const inputs = row.querySelectorAll('input');
+        return { nationality: inputs[0]?.value, visitors: inputs[1]?.value, registrations: inputs[2]?.value };
+      }).filter((r) => r.nationality);
+      try {
+        const data = await postManual('/api/manual/nationality', {
+          month: document.getElementById('nationalityMonth').value,
+          nationalities,
+        });
+        showToast(`Nationality data saved (${data.rowsAdded} rows)`);
+        await loadStatus();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function handleBarriersEntry(e) {
+      e.preventDefault();
+      try {
+        const data = await postManual('/api/manual/barriers', {
+          month: document.getElementById('barriersMonth').value,
+          barriers: [{
+            barrier_name: 'Japanese phone number (CV step)',
+            users_reached: document.getElementById('phoneReached').value,
+            users_dropped: document.getElementById('phoneDropped').value,
+          }],
+        });
+        showToast(`Barrier data saved for ${data.month}`);
+        await loadStatus();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    document.getElementById('addNationalityRow')?.addEventListener('click', () => {
+      const tbody = document.getElementById('nationalityRows');
+      const tr = document.createElement('tr');
+      tr.className = 'nationality-row';
+      tr.innerHTML = '<td><input type="text" placeholder="Nationality"></td><td><input type="number" min="0"></td><td><input type="number" min="0"></td><td></td>';
+      tbody.appendChild(tr);
+    });
+
     companySelect.addEventListener('change', () => {
       updateManualSectionVisibility();
       loadStatus();
@@ -530,6 +717,10 @@
     document.getElementById('applicantMonth').addEventListener('change', loadApplicantFormData);
     document.getElementById('platformEntryForm').addEventListener('submit', handlePlatformEntry);
     document.getElementById('applicantsEntryForm').addEventListener('submit', handleApplicantEntry);
+    document.getElementById('geoEntryForm')?.addEventListener('submit', handleGeoEntry);
+    document.getElementById('visaEntryForm')?.addEventListener('submit', handleVisaEntry);
+    document.getElementById('nationalityEntryForm')?.addEventListener('submit', handleNationalityEntry);
+    document.getElementById('barriersEntryForm')?.addEventListener('submit', handleBarriersEntry);
 
     initMonthInputs();
     updateManualSectionVisibility();

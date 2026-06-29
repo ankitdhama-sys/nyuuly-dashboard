@@ -122,6 +122,60 @@ function initDb() {
       upload_date TEXT DEFAULT (date('now')),
       UNIQUE(company, month_label)
     );
+
+    CREATE TABLE IF NOT EXISTS audience_geo_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company TEXT NOT NULL,
+      month_label TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      in_japan_visitors INTEGER DEFAULT 0,
+      out_japan_visitors INTEGER DEFAULT 0,
+      in_japan_registrations INTEGER DEFAULT 0,
+      out_japan_registrations INTEGER DEFAULT 0,
+      upload_date TEXT DEFAULT (date('now')),
+      UNIQUE(company, month_label)
+    );
+
+    CREATE TABLE IF NOT EXISTS visa_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company TEXT NOT NULL,
+      month_label TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      visa_type TEXT NOT NULL,
+      registrations INTEGER DEFAULT 0,
+      abandonments INTEGER DEFAULT 0,
+      applications INTEGER DEFAULT 0,
+      upload_date TEXT DEFAULT (date('now')),
+      UNIQUE(company, month_label, visa_type)
+    );
+
+    CREATE TABLE IF NOT EXISTS nationality_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company TEXT NOT NULL,
+      month_label TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      nationality TEXT NOT NULL,
+      visitors INTEGER DEFAULT 0,
+      registrations INTEGER DEFAULT 0,
+      upload_date TEXT DEFAULT (date('now')),
+      UNIQUE(company, month_label, nationality)
+    );
+
+    CREATE TABLE IF NOT EXISTS barrier_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company TEXT NOT NULL,
+      month_label TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      barrier_name TEXT NOT NULL,
+      users_reached INTEGER DEFAULT 0,
+      users_dropped INTEGER DEFAULT 0,
+      upload_date TEXT DEFAULT (date('now')),
+      UNIQUE(company, month_label, barrier_name)
+    );
   `);
 }
 

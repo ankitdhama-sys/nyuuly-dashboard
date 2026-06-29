@@ -149,6 +149,448 @@ function syncStateFromUI() {
   }
 }
 
+function formatDelta(pct) {
+  if (pct == null || Number.isNaN(pct)) return '<span class="delta-neutral">— vs 6mo avg</span>';
+  const cls = pct > 0 ? 'delta-up' : pct < 0 ? 'delta-down' : 'delta-neutral';
+  const sign = pct > 0 ? '+' : '';
+  return `<span class="${cls}">${sign}${pct}% vs 6mo avg</span>`;
+}
+
+function renderMarkdownBold(text) {
+  return String(text || '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+function journeyById(journeys, id) {
+  return journeys?.journeys?.find((j) => j.id === id);
+}
+
+function updateCompanyLayout() {
+  const isWj = state.company === 'workjapan';
+  document.body.classList.toggle('company-workjapan', isWj);
+  document.body.classList.toggle('company-nyuuly', !isWj);
+  document.querySelectorAll('.workjapan-only').forEach((el) => {
+    el.style.display = isWj ? '' : 'none';
+  });
+  const journeysTitle = document.getElementById('journeysSectionTitle');
+  if (journeysTitle) {
+    journeysTitle.textContent = isWj
+      ? 'Customer Journey Deep Dive (optional detail)'
+      : 'Customer Journeys';
+  }
+}
+
+function renderDashboardGuide(guide) {
+  if (!guide) return;
+  const title = document.getElementById('guideTitle');
+  const intro = document.getElementById('guideIntro');
+  const pillars = document.getElementById('guidePillars');
+  const legend = document.getElementById('guideLegend');
+  if (title) title.textContent = guide.title || 'How to read this dashboard';
+  if (intro) intro.innerHTML = renderMarkdownBold(guide.intro);
+  if (pillars) {
+    const extra = guide.pillars_extra || [];
+    const all = [...(guide.pillars || []), ...extra.map((p) => ({
+      title: p.label || p.title,
+      body: p.summary || p.body || p.note || '',
+    }))];
+    pillars.innerHTML = all.map((p) => `
+      <div class="guide-pillar">
+        <h4>${p.title}</h4>
+        <p>${p.body}</p>
+      </div>
+    `).join('');
+  }
+  if (legend) {
+    legend.innerHTML = (guide.dataLegend || []).map((d) => `
+      <span class="guide-legend-item"><strong>${d.label}</strong> — ${d.desc}</span>
+    `).join('');
+  }
+}
+
+function renderFunnelNav(guide) {
+  const nav = document.getElementById('funnelNav');
+  if (!nav || state.company !== 'workjapan') return;
+
+  const stages = guide?.funnelStages || [];
+  const pillars = guide?.pillars_extra || [];
+  nav.innerHTML = [
+    ...stages.map((s) => `
+      <a href="#${s.anchor}" class="funnel-nav-link" data-stage="${s.id}">
+        <span class="funnel-nav-num">${s.number}</span>${s.label}
+      </a>
+    `),
+    ...pillars.map((p) => `
+      <a href="#${p.anchor}" class="funnel-nav-link funnel-nav-pillar">${p.label}</a>
+    `),
+  ].join('');
+}
+
+function renderFunnelPipeline(journeys, platform, applicants, social) {
+  const el = document.getElementById('funnelPipeline');
+  if (!el || state.company !== 'workjapan') return;
+
+  const awareness = journeyById(journeys, 'awareness');
+  const seeker = journeyById(journeys, 'seeker-application');
+  const register = journeyById(journeys, 'register-apply');
+
+  const stages = [
+    {
+      anchor: 'stage-awareness',
+      num: 1,
+      label: 'Awareness',
+      value: formatNum(awareness?.kpis?.socialViews),
+      detail: `${formatNum(awareness?.kpis?.socialReach)} reach · ${formatNum(awareness?.kpis?.sessions)} sessions`,
+    },
+    {
+      anchor: 'stage-consideration',
+      num: 2,
+      label: 'Consideration',
+      value: formatNum(seeker?.kpis?.started),
+      detail: seeker?.kpis?.biggestDropOffStep
+        ? `Biggest drop: ${seeker.kpis.biggestDropOffStep} (${formatPct(seeker.kpis.biggestDropOffPct)})`
+        : 'Browse → job detail path',
+    },
+    {
+      anchor: 'stage-commit',
+      num: 3,
+      label: 'Commit (CV)',
+      value: formatNum(platform?.kpis?.totalRegistrations || register?.kpis?.activeUsers),
+      detail: `${formatPct(register?.kpis?.conversionRate)} conversion to register`,
+    },
+    {
+      anchor: 'stage-proceed',
+      num: 4,
+      label: 'Proceed',
+      value: formatNum(applicants?.latest?.total_applications ?? applicants?.kpis?.totalApplications),
+      detail: `${formatNum(applicants?.latest?.unique_applicants)} unique applicants`,
+    },
+    {
+      anchor: 'stage-result',
+      num: 5,
+      label: 'Result',
+      value: formatNum(applicants?.latest?.selected ?? applicants?.kpis?.selected),
+      detail: `${formatNum(applicants?.latest?.interviews_fixed)} interviews`,
+    },
+  ];
+
+  el.innerHTML = stages.map((s, i) => `
+    <a href="#${s.anchor}" class="pipeline-stage">
+      <div class="pipeline-num">${s.num}</div>
+      <div class="pipeline-label">${s.label}</div>
+      <div class="pipeline-value">${s.value}</div>
+      <div class="pipeline-detail">${s.detail}</div>
+    </a>
+    ${i < stages.length - 1 ? '<div class="pipeline-arrow">→</div>' : ''}
+  `).join('');
+}
+
+function renderConsiderationDropoffs(journeys) {
+  const el = document.getElementById('considerationDropoffs');
+  if (!el || state.company !== 'workjapan') return;
+
+  const seeker = journeyById(journeys, 'seeker-application');
+  const browse = journeyById(journeys, 'browse-jobs');
+  const jobDetail = journeyById(journeys, 'job-detail');
+
+  if (!seeker?.applicationFunnel?.length) {
+    el.innerHTML = '<div class="highlight-panel empty">Upload Pages CSV to see application path drop-offs.</div>';
+    return;
+  }
+
+  const drops = seeker.applicationFunnel
+    .filter((s, i) => i > 0 && s.dropOffPct > 0)
+    .sort((a, b) => b.dropOffPct - a.dropOffPct);
+
+  el.innerHTML = `
+    <div class="highlight-panel">
+      <h4>Biggest drop-offs in the job seeker path</h4>
+      <div class="highlight-grid">
+        <div class="highlight-card abandon-red">
+          <div class="highlight-label">Worst step</div>
+          <div class="highlight-value">${seeker.kpis?.biggestDropOffStep || '—'}</div>
+          <div class="highlight-sub">${formatPct(seeker.kpis?.biggestDropOffPct)} drop-off</div>
+        </div>
+        <div class="highlight-card">
+          <div class="highlight-label">Browse pages</div>
+          <div class="highlight-value">${formatNum(browse?.kpis?.pageViews)}</div>
+          <div class="highlight-sub">${formatNum(browse?.kpis?.activeUsers)} users</div>
+        </div>
+        <div class="highlight-card">
+          <div class="highlight-label">Job detail views</div>
+          <div class="highlight-value">${formatNum(jobDetail?.kpis?.pageViews)}</div>
+          <div class="highlight-sub">${formatNum(jobDetail?.kpis?.uniqueJobPages)} job pages</div>
+        </div>
+      </div>
+      ${drops.length ? `<div class="dropoff-steps">${drops.slice(0, 4).map((d) => `
+        <span class="dropoff-chip">${d.label}: −${formatPct(d.dropOffPct)}</span>
+      `).join('')}</div>` : ''}
+    </div>
+  `;
+}
+
+function renderCommitBarriers(intelligence) {
+  const el = document.getElementById('commitBarriers');
+  if (!el || state.company !== 'workjapan') return;
+
+  const barrier = intelligence?.barriers?.latest;
+  const geo = intelligence?.geo?.latest;
+  const dropRate = intelligence?.barriers?.dropOffRate;
+
+  if (!barrier && !geo) {
+    el.innerHTML = `
+      <div class="highlight-panel empty">
+        Enter <strong>conversion barriers</strong> and <strong>audience geography</strong> on the
+        <a href="/upload">upload page</a> to track Japanese phone number drop-offs and in-Japan vs abroad users.
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="highlight-panel">
+      <h4>Commit stage barriers &amp; geography</h4>
+      <div class="highlight-grid">
+        ${barrier ? `
+        <div class="highlight-card abandon-red">
+          <div class="highlight-label">${barrier.barrier_name}</div>
+          <div class="highlight-value">${formatPct(dropRate)}</div>
+          <div class="highlight-sub">${formatNum(barrier.users_dropped)} dropped of ${formatNum(barrier.users_reached)} reached</div>
+        </div>` : ''}
+        ${geo ? `
+        <div class="highlight-card">
+          <div class="highlight-label">In Japan visitors</div>
+          <div class="highlight-value">${formatNum(geo.in_japan_visitors)}</div>
+          <div class="highlight-sub">${formatDelta(intelligence.geo.comparisons?.inJapanVisitors?.vsAvgPct)}</div>
+        </div>
+        <div class="highlight-card">
+          <div class="highlight-label">Outside Japan visitors</div>
+          <div class="highlight-value">${formatNum(geo.out_japan_visitors)}</div>
+          <div class="highlight-sub">${formatDelta(intelligence.geo.comparisons?.outJapanVisitors?.vsAvgPct)}</div>
+        </div>
+        <div class="highlight-card">
+          <div class="highlight-label">In Japan registrations</div>
+          <div class="highlight-value">${formatNum(geo.in_japan_registrations)}</div>
+          <div class="highlight-sub">vs ${formatNum(geo.out_japan_registrations)} abroad</div>
+        </div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderEmployerPanel(journeys) {
+  const el = document.getElementById('employerPanel');
+  if (!el || state.company !== 'workjapan') return;
+
+  const employer = journeyById(journeys, 'employer');
+  if (!employer) {
+    el.innerHTML = '<div class="empty-state">No employer journey data.</div>';
+    return;
+  }
+
+  el.innerHTML = `
+    <p class="subsection-hint">${employer.description} Employer backend metrics (hires, job posts live) are not in GA4 — add manual entry later if needed.</p>
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="label">Employer Page Views</div><div class="value">${formatNum(employer.kpis?.pageViews)}</div></div>
+      <div class="kpi-card"><div class="label">Active Users</div><div class="value">${formatNum(employer.kpis?.activeUsers)}</div></div>
+    </div>
+    <h4 class="subsection-title">Top Employer Pages</h4>
+    ${renderPageListTable(employer.topPages)}
+    <p class="journey-note">This is a separate customer type from job seekers. Do not compare employer numbers directly to the 5-stage seeker funnel above.</p>
+  `;
+}
+
+function renderIntelligencePanel(intelligence) {
+  const el = document.getElementById('intelligencePanel');
+  if (!el || state.company !== 'workjapan') return;
+
+  const hasData = intelligence?.geo?.rows?.length
+    || intelligence?.visa?.rows?.length
+    || intelligence?.nationality?.rows?.length;
+
+  if (!hasData) {
+    el.innerHTML = '<div class="empty-state">No intelligence data yet — enter nationality, visa, geography, and barriers on the <a href="/upload">upload page</a>.</div>';
+    return;
+  }
+
+  const visaRows = intelligence.visa?.byType || [];
+  const natTop = intelligence.nationality?.top || [];
+
+  el.innerHTML = `
+    <div class="highlight-grid">
+      ${visaRows.map((v) => `
+        <div class="highlight-card ${v.abandonmentRate > 30 ? 'abandon-red' : ''}">
+          <div class="highlight-label">${v.visa_type}</div>
+          <div class="highlight-value">${v.abandonmentRate != null ? formatPct(v.abandonmentRate) : '—'}</div>
+          <div class="highlight-sub">abandonment · ${formatDelta(v.vsAvgPct)}</div>
+          <div class="highlight-sub">${formatNum(v.latest?.registrations)} reg · ${formatNum(v.latest?.abandonments)} abandon</div>
+        </div>
+      `).join('')}
+    </div>
+    ${natTop.length ? `
+      <h4 class="subsection-title">Top nationalities (${intelligence.nationality.latestMonth || 'latest'})</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nationality</th><th>Visitors</th><th>Registrations</th><th>vs 6mo avg</th></tr></thead>
+        <tbody>${natTop.map((n) => `
+          <tr>
+            <td>${n.nationality}</td>
+            <td>${formatNum(n.visitors)}</td>
+            <td>${formatNum(n.registrations)}</td>
+            <td>${formatDelta(n.vsAvgPct)}</td>
+          </tr>
+        `).join('')}</tbody>
+      </table></div>
+    ` : ''}
+  `;
+}
+
+function renderChartVisaAbandon(byType) {
+  destroyChart('chartVisaAbandon');
+  const ctx = document.getElementById('chartVisaAbandon');
+  if (!ctx || !byType?.length) return;
+  const withData = byType.filter((v) => v.abandonmentRate != null);
+  if (!withData.length) return;
+
+  charts.chartVisaAbandon = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: withData.map((v) => v.visa_type),
+      datasets: [
+        {
+          label: 'Abandonment % (latest)',
+          data: withData.map((v) => v.abandonmentRate),
+          backgroundColor: withData.map((v) => (v.abandonmentRate > 30 ? '#ef4444' : COLORS.workjapan)),
+        },
+        {
+          label: '6-month avg %',
+          data: withData.map((v) => v.avgAbandonmentRate6mo || 0),
+          backgroundColor: 'rgba(136, 146, 176, 0.4)',
+        },
+      ],
+    },
+    options: chartDefaults(),
+  });
+}
+
+function renderChartNationality(top) {
+  destroyChart('chartNationality');
+  const ctx = document.getElementById('chartNationality');
+  if (!ctx || !top?.length) return;
+
+  charts.chartNationality = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: top.map((n) => n.nationality),
+      datasets: [{
+        label: 'Visitors',
+        data: top.map((n) => n.visitors),
+        backgroundColor: COLORS.nyuuly,
+      }],
+    },
+    options: chartDefaults(),
+  });
+}
+
+function renderSocialAccountsTable(byAccount) {
+  const table = document.getElementById('socialAccountsTable');
+  if (!table) return;
+  if (!byAccount?.length) {
+    table.querySelector('thead').innerHTML = '';
+    table.querySelector('tbody').innerHTML = '<tr><td colspan="5" class="empty-state">Upload social CSV per platform (IG, YouTube, Facebook…)</td></tr>';
+    return;
+  }
+  table.querySelector('thead').innerHTML = '<tr><th>Account</th><th>Posts</th><th>Views</th><th>Reach</th><th>Engagement</th></tr>';
+  table.querySelector('tbody').innerHTML = byAccount.map((a) => `
+    <tr>
+      <td>${a.account}${a.account_username ? ` <span class="text-muted">@${a.account_username}</span>` : ''}</td>
+      <td>${formatNum(a.posts)}</td>
+      <td>${formatNum(a.views)}</td>
+      <td>${formatNum(a.reach)}</td>
+      <td>${formatNum(a.engagement)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderChartSocialAccounts(byAccount) {
+  destroyChart('chartSocialAccounts');
+  const ctx = document.getElementById('chartSocialAccounts');
+  if (!ctx || !byAccount?.length) return;
+
+  charts.chartSocialAccounts = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: byAccount.map((a) => a.account),
+      datasets: [
+        { label: 'Views', data: byAccount.map((a) => a.views), backgroundColor: COLORS.workjapan },
+        { label: 'Reach', data: byAccount.map((a) => a.reach), backgroundColor: COLORS.nyuuly },
+      ],
+    },
+    options: chartDefaults(),
+  });
+}
+
+function renderTopJobsTable(topJobs) {
+  const table = document.getElementById('topJobsTable');
+  if (!table) return;
+  if (!topJobs?.length) {
+    table.querySelector('thead').innerHTML = '';
+    table.querySelector('tbody').innerHTML = '<tr><td colspan="4" class="empty-state">No job detail pages in Pages CSV</td></tr>';
+    return;
+  }
+  table.querySelector('thead').innerHTML = '<tr><th>Job Page</th><th>Views</th><th>Users</th><th>Avg Time</th></tr>';
+  table.querySelector('tbody').innerHTML = topJobs.map((j) => `
+    <tr>
+      <td>${j.path}</td>
+      <td>${formatNum(j.views)}</td>
+      <td>${formatNum(j.users)}</td>
+      <td>${formatNum(j.avgTime)}s</td>
+    </tr>
+  `).join('');
+}
+
+function renderApplicantProceedKpis(kpis, latest) {
+  const el = document.getElementById('applicantProceedKpis');
+  if (!el) return;
+  if (!latest && (!kpis || !kpis.uniqueApplicants)) {
+    el.innerHTML = '<div class="empty-state">No application data — <a href="/upload">enter on upload page</a></div>';
+    return;
+  }
+  const data = latest || kpis;
+  el.innerHTML = `
+    <div class="kpi-card"><div class="label">Unique Applicants</div><div class="value">${formatNum(data.unique_applicants ?? data.uniqueApplicants)}</div></div>
+    <div class="kpi-card"><div class="label">Total Applications</div><div class="value">${formatNum(data.total_applications ?? data.totalApplications)}</div></div>
+    <div class="kpi-card"><div class="label">Latest Month</div><div class="value" style="font-size:1rem">${data.month_label || '—'}</div></div>
+  `;
+}
+
+function renderApplicantResultKpis(kpis, latest) {
+  const el = document.getElementById('applicantResultKpis');
+  if (!el) return;
+  if (!latest && (!kpis || !kpis.selected)) {
+    el.innerHTML = '<div class="empty-state">No outcome data — <a href="/upload">enter on upload page</a></div>';
+    return;
+  }
+  const data = latest || kpis;
+  el.innerHTML = `
+    <div class="kpi-card"><div class="label">Screening Passes</div><div class="value">${formatNum(data.screening_passes ?? data.screeningPasses)}</div></div>
+    <div class="kpi-card"><div class="label">Interviews Fixed</div><div class="value">${formatNum(data.interviews_fixed ?? data.interviewsFixed)}</div></div>
+    <div class="kpi-card"><div class="label">Remaining ESP</div><div class="value">${formatNum(data.remaining_esp ?? data.remainingEsp)}</div></div>
+    <div class="kpi-card"><div class="label">Selected</div><div class="value">${formatNum(data.selected)}</div></div>
+  `;
+}
+
+function renderProceedWebFunnel(journeys) {
+  const el = document.getElementById('proceedWebFunnel');
+  if (!el || state.company !== 'workjapan') return;
+  const seeker = journeyById(journeys, 'seeker-application');
+  if (!seeker?.applicationFunnel?.length) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `
+    <h4 class="subsection-title">Web application path (Pages CSV)</h4>
+    ${renderApplicationFunnel(seeker.applicationFunnel)}
+  `;
+}
+
 function renderPlatformKpis(kpis) {
   const el = document.getElementById('platformKpis');
   if (!el) return;
@@ -368,7 +810,9 @@ function renderJourneyPanel(data) {
   const panel = document.getElementById('journeyPanel');
   const intro = document.getElementById('journeyIntro');
   if (intro && data?.companyLabel) {
-    intro.textContent = `${data.companyLabel} customer journeys — built from your 4 weekly CSVs (social, traffic, pages, funnel).`;
+    intro.textContent = data.company === 'workjapan'
+      ? 'Optional detail view — the 5-stage funnel above is the primary navigation. Use these tabs for step-by-step exploration of specific paths.'
+      : `${data.companyLabel} customer journeys — built from your 4 weekly CSVs (social, traffic, pages, funnel).`;
   }
 
   if (!data || !data.journeys?.length) {
@@ -1204,16 +1648,10 @@ function renderPagination(containerId, current, total, onChange) {
   document.getElementById(`${containerId}_next`)?.addEventListener('click', () => onChange(current + 1));
 }
 
-function updateWorkJapanOnlySections() {
-  const show = state.company === 'workjapan';
-  document.getElementById('section-platform').style.display = show ? '' : 'none';
-  document.getElementById('section-applicants').style.display = show ? '' : 'none';
-}
-
 async function loadDashboard() {
   const q = buildQuery();
   document.body.classList.add('is-loading');
-  updateWorkJapanOnlySections();
+  updateCompanyLayout();
 
   try {
     const isWorkJapan = state.company === 'workjapan';
@@ -1223,26 +1661,41 @@ async function loadDashboard() {
       fetchJSON(`/api/traffic?${q}`),
       fetchJSON(`/api/pages?${q}`),
       fetchJSON(`/api/journeys?${q}`),
+      fetchJSON(`/api/dashboard-guide?company=${state.company}`),
     ];
     if (isWorkJapan) {
       fetches.push(fetchJSON(`/api/platform-stats?${q}`));
       fetches.push(fetchJSON(`/api/applicant-stats?${q}`));
+      fetches.push(fetchJSON(`/api/intelligence?${q}`));
     }
 
     const results = await Promise.all(fetches);
-    const [social, funnel, traffic, pages, journeys, platform, applicants] = isWorkJapan
+    const [social, funnel, traffic, pages, journeys, guide, platform, applicants, intelligence] = isWorkJapan
       ? results
-      : [...results, null, null];
+      : [...results.slice(0, 6), null, null, null];
 
     updateFilterLabel(journeys.filter || social.filter);
+    renderDashboardGuide(guide);
+    renderFunnelNav(guide);
 
     if (isWorkJapan) {
+      renderFunnelPipeline(journeys, platform, applicants, social);
+      renderConsiderationDropoffs(journeys);
+      renderCommitBarriers(intelligence);
+      renderEmployerPanel(journeys);
+      renderIntelligencePanel(intelligence);
+      renderChartVisaAbandon(intelligence?.visa?.byType);
+      renderChartNationality(intelligence?.nationality?.top);
+      renderTopJobsTable(intelligence?.topJobs);
+
       renderPlatformKpis(platform.kpis);
       renderChartRegistrationsByMonth(platform.byMonth, platform.platforms);
       renderChartActiveByPlatform(platform.byPlatform);
       renderPlatformTable(platform.rows);
 
-      renderApplicantKpis(applicants.kpis, applicants.latest);
+      renderProceedWebFunnel(journeys);
+      renderApplicantProceedKpis(applicants.kpis, applicants.latest);
+      renderApplicantResultKpis(applicants.kpis, applicants.latest);
       renderChartApplicantFunnel(applicants.funnelSteps, applicants.latest?.month_label);
       renderChartApplicantsByMonth(applicants.rows);
       renderApplicantTable(applicants.rows);
@@ -1261,6 +1714,10 @@ async function loadDashboard() {
     renderChartViewsReach(social.timeSeries || []);
     renderChartEngagement(social.topPosts || []);
     renderChartPostTypes(social.postTypes || []);
+    if (isWorkJapan) {
+      renderSocialAccountsTable(social.byAccount);
+      renderChartSocialAccounts(social.byAccount);
+    }
 
     socialPosts = social.posts || [];
     socialPage = 1;
