@@ -354,6 +354,69 @@ function getDropOffContext(step) {
   return CONSIDERATION_DROP_CONTEXT[step.path] || CONSIDERATION_DROP_CONTEXT.default;
 }
 
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function parseUploadDate(raw, year, month) {
+  if (!raw) return `${year}-${String(month).padStart(2, '0')}-01`;
+  const s = String(raw).slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return `${year}-${String(month).padStart(2, '0')}-01`;
+}
+
+/**
+ * Latest manual platform upload — registrations are month-to-date from the 1st through upload day.
+ */
+function buildRegistrationSnapshot(platformRows) {
+  if (!platformRows?.length) return null;
+
+  const byMonth = {};
+  for (const r of platformRows) {
+    const key = r.month_label;
+    if (!byMonth[key]) {
+      byMonth[key] = { year: r.year, month: r.month, month_label: key, rows: [], uploadDate: r.upload_date };
+    }
+    byMonth[key].rows.push(r);
+    if (r.upload_date && (!byMonth[key].uploadDate || String(r.upload_date) > String(byMonth[key].uploadDate))) {
+      byMonth[key].uploadDate = r.upload_date;
+    }
+  }
+
+  const sorted = Object.values(byMonth).sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month));
+  const latest = sorted[sorted.length - 1];
+  const uploadDateStr = parseUploadDate(latest.uploadDate, latest.year, latest.month);
+  const [, , ud] = uploadDateStr.split('-').map(Number);
+  const daysInPeriod = ud;
+  const daysInMonth = new Date(latest.year, latest.month, 0).getDate();
+  const monthShort = MONTH_SHORT[latest.month - 1] || String(latest.month);
+
+  const byPlatform = latest.rows.map((row) => ({
+    platform: row.platform,
+    registrations: row.registrations || 0,
+    active_users: row.active_users || 0,
+  }));
+
+  const web = byPlatform.find((p) => p.platform === 'Web') || { registrations: 0, active_users: 0 };
+  const totalRegistrations = byPlatform.reduce((s, p) => s + p.registrations, 0);
+  const totalActiveUsers = byPlatform.reduce((s, p) => s + p.active_users, 0);
+
+  return {
+    monthLabel: latest.month_label,
+    periodStart: `${latest.year}-${String(latest.month).padStart(2, '0')}-01`,
+    periodEnd: uploadDateStr,
+    daysInPeriod,
+    daysInMonth,
+    periodLabel: `1 ${monthShort} – ${ud} ${monthShort} ${latest.year}`,
+    periodNote: `Registrations are counted from the 1st of the month through the day you saved on the upload page (${daysInPeriod} day${daysInPeriod !== 1 ? 's' : ''} of data).`,
+    uploadDate: uploadDateStr,
+    isPartialMonth: daysInPeriod < daysInMonth,
+    webRegistrations: web.registrations,
+    webActiveUsers: web.active_users,
+    totalRegistrations,
+    totalActiveUsers,
+    byPlatform,
+  };
+}
+
 /**
  * Unified consideration insights: drop-offs ranked with reasons, navigation paths, journey summaries.
  */
@@ -366,6 +429,7 @@ function buildConsiderationInsights({
   topJobCategories,
   ga4Funnel,
   funnelEntryUsers,
+  platformRows,
 }) {
   const funnel = seekerFunnel || [];
   const funnelStart = funnel[0]?.users || funnel[0]?.views || funnelEntryUsers || 0;
@@ -483,6 +547,25 @@ function buildConsiderationInsights({
     return { ...s, dropOffPct: drop };
   });
 
+  const registrations = buildRegistrationSnapshot(platformRows);
+  const registerStep = funnel.find((s) => s.path === '/register');
+  const jobDetailStep = funnel.find((s) => s.path === '__job_detail_aggregate__');
+  const registerPageUsers = registerStep?.users || registerStep?.views || 0;
+  const jobDetailUsers = jobDetailStep?.users || jobDetailStep?.views || 0;
+
+  const registrationBridge = registrations ? {
+    jobDetailUsers,
+    registerPageUsers,
+    webRegistrations: registrations.webRegistrations,
+    registerPageToWebGap: Math.max(0, registerPageUsers - registrations.webRegistrations),
+    jobDetailToWebRate: jobDetailUsers > 0
+      ? Math.round((registrations.webRegistrations / jobDetailUsers) * 1000) / 10
+      : null,
+    registerPageToWebRate: registerPageUsers > 0
+      ? Math.round((registrations.webRegistrations / registerPageUsers) * 1000) / 10
+      : null,
+  } : null;
+
   return {
     biggestDropOff,
     dropOffs: considerationDropOffs,
@@ -502,6 +585,8 @@ function buildConsiderationInsights({
     estimatedBrowseOnly: browse?.kpis?.estimatedBrowseOnly,
     ga4ConsiderationSteps,
     funnelStartUsers: funnelStart,
+    registrations,
+    registrationBridge,
   };
 }
 
@@ -522,5 +607,6 @@ module.exports = {
   getLandingPages,
   isJobDetailPage,
   buildConsiderationInsights,
+  buildRegistrationSnapshot,
   CONSIDERATION_DROP_CONTEXT,
 };

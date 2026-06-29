@@ -22,7 +22,7 @@ const WORKJAPAN_FUNNEL_STAGES = [
     question: 'Where do users come from, what pages do they view, and where do they drop off?',
     summary: 'Traffic sources, page navigation, job browsing, and the biggest drop-offs before registration.',
     anchor: 'stage-consideration',
-    dataSources: ['Traffic CSV', 'Pages CSV', 'Funnel CSV'],
+    dataSources: ['Traffic CSV', 'Pages CSV', 'Funnel CSV', 'Platform registrations (manual, month-to-date)'],
     journeyIds: ['browse-jobs', 'job-detail'],
     sectionIds: ['section-traffic', 'section-pages', 'consideration-dropoffs'],
   },

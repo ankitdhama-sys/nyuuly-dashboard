@@ -1610,6 +1610,39 @@ body.is-loading .filter-label::after {
   max-width: 220px;
 }
 
+.consideration-registrations {
+  border-color: rgba(79, 142, 247, 0.35);
+  background: rgba(79, 142, 247, 0.04);
+}
+
+.registration-period-note {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 1rem;
+}
+
+.partial-month-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: rgba(255, 107, 53, 0.15);
+  color: var(--workjapan);
+}
+
+.registration-card-primary {
+  border-color: rgba(79, 142, 247, 0.45);
+}
+
+.registration-row-actual {
+  background: rgba(79, 142, 247, 0.06);
+}
+
+.consideration-stat-pill-reg {
+  border-color: rgba(79, 142, 247, 0.35);
+}
+
 @media (max-width: 900px) {
   .consideration-grid {
     grid-template-columns: 1fr;

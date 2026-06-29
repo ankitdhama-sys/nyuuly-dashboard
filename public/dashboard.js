@@ -284,29 +284,129 @@ function renderFunnelPipeline(journeys, platform, applicants, social) {
   `).join('');
 }
 
+function renderConsiderationRegistrationBlock(registrations, bridge) {
+  if (!registrations) {
+    return `
+      <div class="consideration-panel full-width consideration-registrations consideration-registrations-empty">
+        <h4>Web registrations (manual)</h4>
+        <p class="subsection-hint">Enter platform registrations on the <a href="/upload">upload page</a>. Counts are month-to-date from the 1st through the day you save.</p>
+      </div>`;
+  }
+
+  const bridgeRows = bridge ? [
+    { label: 'Job detail page users', value: bridge.jobDetailUsers, source: 'Pages CSV (dashboard date range)' },
+    { label: 'Register page users', value: bridge.registerPageUsers, source: 'Pages CSV' },
+    { label: 'Web registrations (actual)', value: bridge.webRegistrations, source: 'Manual upload', highlight: true },
+  ] : [];
+
+  return `
+    <div class="consideration-panel full-width consideration-registrations">
+      <h4>Web registrations — actual sign-ups (manual upload)</h4>
+      <p class="subsection-hint">
+        <strong>${registrations.monthLabel}</strong> · period: <strong>${registrations.periodLabel}</strong>
+        · saved ${registrations.uploadDate}
+        ${registrations.isPartialMonth ? `<span class="partial-month-badge">Partial month (${registrations.daysInPeriod} of ${registrations.daysInMonth} days)</span>` : ''}
+      </p>
+      <p class="registration-period-note">${registrations.periodNote}</p>
+      <div class="highlight-grid registration-kpis">
+        <div class="highlight-card registration-card-primary">
+          <div class="highlight-label">Web registrations</div>
+          <div class="highlight-value">${formatNum(registrations.webRegistrations)}</div>
+          <div class="highlight-sub">${registrations.periodLabel}</div>
+        </div>
+        <div class="highlight-card">
+          <div class="highlight-label">Web active users</div>
+          <div class="highlight-value">${formatNum(registrations.webActiveUsers)}</div>
+          <div class="highlight-sub">Same period</div>
+        </div>
+        <div class="highlight-card">
+          <div class="highlight-label">All platforms — registrations</div>
+          <div class="highlight-value">${formatNum(registrations.totalRegistrations)}</div>
+          <div class="highlight-sub">Web + Android + iOS</div>
+        </div>
+        ${bridge?.jobDetailToWebRate != null ? `
+        <div class="highlight-card">
+          <div class="highlight-label">Job detail → web sign-up</div>
+          <div class="highlight-value">${formatPct(bridge.jobDetailToWebRate)}</div>
+          <div class="highlight-sub">${formatNum(bridge.webRegistrations)} reg ÷ ${formatNum(bridge.jobDetailUsers)} job viewers</div>
+        </div>` : ''}
+      </div>
+      ${bridgeRows.length ? `
+        <h5 class="subsection-title">GA4 pages vs actual web registrations</h5>
+        <p class="subsection-hint">Pages CSV uses your dashboard date filter. Manual registrations use the month-to-date period above — periods may differ slightly.</p>
+        <div class="table-wrap"><table class="consideration-table">
+          <thead><tr><th>Metric</th><th>Count</th><th>Source</th></tr></thead>
+          <tbody>${bridgeRows.map((row) => `
+            <tr class="${row.highlight ? 'registration-row-actual' : ''}">
+              <td>${row.label}</td>
+              <td><strong>${formatNum(row.value)}</strong></td>
+              <td class="nav-hint">${row.source}</td>
+            </tr>
+          `).join('')}
+          ${bridge.registerPageUsers > 0 && bridge.webRegistrations > 0 ? `
+            <tr>
+              <td>Register page → web sign-up rate</td>
+              <td><strong>${formatPct(bridge.registerPageToWebRate)}</strong></td>
+              <td class="nav-hint">Actual reg ÷ register page users</td>
+            </tr>
+          ` : ''}
+          </tbody>
+        </table></div>
+      ` : ''}
+      <div class="table-wrap" style="margin-top:0.75rem">
+        <table class="consideration-table">
+          <thead><tr><th>Platform</th><th>Registrations (MTD)</th><th>Active users</th></tr></thead>
+          <tbody>${registrations.byPlatform.map((p) => `
+            <tr class="${p.platform === 'Web' ? 'registration-row-actual' : ''}">
+              <td>${p.platform}</td>
+              <td>${formatNum(p.registrations)}</td>
+              <td>${formatNum(p.active_users)}</td>
+            </tr>
+          `).join('')}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 function renderConsiderationInsights(consideration) {
   const el = document.getElementById('considerationInsights');
   if (!el || state.company !== 'workjapan') return;
 
-  if (!consideration?.fullFunnel?.length) {
+  const hasFunnel = consideration?.fullFunnel?.length;
+  const hasRegistrations = consideration?.registrations;
+
+  if (!hasFunnel && !hasRegistrations) {
     el.innerHTML = `
       <div class="consideration-hub-inner">
         <div class="highlight-panel empty">
-          Upload the <strong>Pages CSV</strong> to see navigation paths and drop-offs in consideration.
-          Traffic CSV shows where users come from in the section below.
+          Upload the <strong>Pages CSV</strong> to see navigation paths and drop-offs, and enter
+          <strong>platform registrations</strong> on the <a href="/upload">upload page</a> for actual web sign-up counts.
         </div>
+      </div>`;
+    return;
+  }
+
+  if (!hasFunnel) {
+    el.innerHTML = `
+      <div class="consideration-hub-inner">
+        ${renderConsiderationRegistrationBlock(consideration.registrations, consideration.registrationBridge)}
+        <div class="highlight-panel empty">Upload the <strong>Pages CSV</strong> to add navigation paths and drop-off analysis.</div>
       </div>`;
     return;
   }
 
   const biggest = consideration.biggestDropOff;
   const topReason = biggest?.likelyReasons?.[0] || 'See ranked table below';
+  const reg = consideration.registrations;
 
   el.innerHTML = `
     <div class="consideration-hub-inner">
+      ${renderConsiderationRegistrationBlock(reg, consideration.registrationBridge)}
+
       <div class="consideration-hero ${biggest?.dropOffPct > 30 ? 'consideration-hero-alert' : ''}">
         <div class="consideration-hero-main">
-          <span class="consideration-hero-label">#1 drop-off in consideration</span>
+          <span class="consideration-hero-label">#1 drop-off in consideration (GA4 pages path)</span>
           <h3 class="consideration-hero-title">${biggest ? `${biggest.fromLabel} → ${biggest.toLabel}` : '—'}</h3>
           <p class="consideration-hero-stat">
             <strong>${formatPct(biggest?.dropOffPct)}</strong> of users lost
@@ -315,6 +415,11 @@ function renderConsiderationInsights(consideration) {
           <p class="consideration-hero-why"><strong>Likely why:</strong> ${topReason}</p>
         </div>
         <div class="consideration-hero-meta">
+          ${reg ? `
+          <div class="consideration-stat-pill consideration-stat-pill-reg">
+            <span class="pill-label">Web registrations (actual)</span>
+            <span class="pill-value">${formatNum(reg.webRegistrations)} · ${reg.periodLabel}</span>
+          </div>` : ''}
           <div class="consideration-stat-pill">
             <span class="pill-label">Browse-only (est.)</span>
             <span class="pill-value">${formatNum(consideration.estimatedBrowseOnly)} users (${formatPct(consideration.browseOnlyRate)})</span>

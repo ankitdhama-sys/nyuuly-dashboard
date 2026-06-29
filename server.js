@@ -1624,6 +1624,14 @@ app.get('/api/journeys', (req, res) => {
   const browseJourney = journeys.find((j) => j.id === 'browse-jobs');
   const jobDetailJourney = journeys.find((j) => j.id === 'job-detail');
 
+  const platformQuery = buildMonthlyStatsQuery(company, start, end);
+  const platformRows = journeyCompany === 'workjapan'
+    ? db.prepare(`
+        SELECT * FROM platform_stats ${platformQuery.clause}
+        ORDER BY year, month, platform
+      `).all(...platformQuery.params)
+    : [];
+
   const consideration = journeyCompany === 'workjapan'
     ? buildConsiderationInsights({
         seekerFunnel: seekerJourney?.applicationFunnel,
@@ -1634,6 +1642,7 @@ app.get('/api/journeys', (req, res) => {
         topJobCategories,
         ga4Funnel,
         funnelEntryUsers,
+        platformRows,
       })
     : null;
 
